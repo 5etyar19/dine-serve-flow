@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { CustomerInterface } from "./customer/CustomerInterface";
 import { KitchenInterface } from "./interfaces/KitchenInterface";
+import { CashierInterface } from "./interfaces/CashierInterface";
+import { AdminDashboard } from "./interfaces/AdminDashboard";
 import { QrCode, Users, ChefHat, CreditCard, BarChart3, Smartphone, Clock, CheckCircle } from "lucide-react";
 import heroImage from "@/assets/hero-restaurant.jpg";
 
@@ -13,11 +15,19 @@ export const SmartServeLanding = () => {
   const [currentInterface, setCurrentInterface] = useState<InterfaceType>("landing");
 
   if (currentInterface === "customer") {
-    return <CustomerInterface />;
+    return <CustomerInterface onBack={() => setCurrentInterface("landing")} />;
   }
 
   if (currentInterface === "kitchen") {
-    return <KitchenInterface />;
+    return <KitchenInterface onBack={() => setCurrentInterface("landing")} />;
+  }
+
+  if (currentInterface === "cashier") {
+    return <CashierInterface onBack={() => setCurrentInterface("landing")} />;
+  }
+
+  if (currentInterface === "admin") {
+    return <AdminDashboard onBack={() => setCurrentInterface("landing")} />;
   }
 
   const features = [
@@ -193,26 +203,26 @@ export const SmartServeLanding = () => {
             <Button 
               variant="outline" 
               size="lg" 
-              className="h-auto p-6 flex-col gap-3 hover:shadow-elegant opacity-75 cursor-not-allowed"
-              disabled
+              onClick={() => setCurrentInterface("cashier")}
+              className="h-auto p-6 flex-col gap-3 hover:shadow-elegant"
             >
-              <CreditCard className="w-8 h-8 text-muted-foreground" />
+              <CreditCard className="w-8 h-8 text-primary" />
               <div>
                 <div className="font-semibold">Cashier Interface</div>
-                <div className="text-sm text-muted-foreground">Coming soon</div>
+                <div className="text-sm text-muted-foreground">Payment & billing</div>
               </div>
             </Button>
             
             <Button 
               variant="outline" 
               size="lg" 
-              className="h-auto p-6 flex-col gap-3 hover:shadow-elegant opacity-75 cursor-not-allowed"
-              disabled
+              onClick={() => setCurrentInterface("admin")}
+              className="h-auto p-6 flex-col gap-3 hover:shadow-elegant"
             >
-              <BarChart3 className="w-8 h-8 text-muted-foreground" />
+              <BarChart3 className="w-8 h-8 text-primary" />
               <div>
                 <div className="font-semibold">Admin Dashboard</div>
-                <div className="text-sm text-muted-foreground">Coming soon</div>
+                <div className="text-sm text-muted-foreground">Analytics & management</div>
               </div>
             </Button>
           </div>

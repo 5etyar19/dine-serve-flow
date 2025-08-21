@@ -1,125 +1,156 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Clock, CheckCircle, XCircle, Users } from "lucide-react";
-
-interface OrderItem {
-  id: string;
-  name: string;
-  quantity: number;
-  notes?: string;
-}
+import { supabase } from "@/lib/supabase";
+import { CheckCircle, X, Clock, ChefHat, ArrowLeft } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface Order {
   id: string;
-  tableNumber: number;
-  items: OrderItem[];
-  totalAmount: number;
-  timestamp: Date;
-  status: "pending" | "accepted" | "rejected" | "completed";
-  estimatedTime?: number;
+  table_id: string;
+  customer_name: string | null;
+  total_amount: number;
+  status: 'pending' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+  tables: { table_number: number };
+  order_items: Array<{
+    quantity: number;
+    price_per_item: number;
+    menu_items: { name: string };
+  }>;
 }
 
-const MOCK_ORDERS: Order[] = [
-  {
-    id: "ORD-001",
-    tableNumber: 12,
-    items: [
-      { id: "1", name: "Signature Gourmet Burger", quantity: 2 },
-      { id: "2", name: "Fresh Caesar Salad", quantity: 1 }
-    ],
-    totalAmount: 52.97,
-    timestamp: new Date(Date.now() - 5 * 60 * 1000),
-    status: "pending"
-  },
-  {
-    id: "ORD-002", 
-    tableNumber: 8,
-    items: [
-      { id: "3", name: "Chocolate Decadence", quantity: 2 },
-      { id: "1", name: "Signature Gourmet Burger", quantity: 1 }
-    ],
-    totalAmount: 44.97,
-    timestamp: new Date(Date.now() - 8 * 60 * 1000),
-    status: "accepted",
-    estimatedTime: 15
-  }
-];
+interface KitchenInterfaceProps {
+  onBack: () => void;
+}
 
-export const KitchenInterface = () => {
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
+export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  const handleOrderAction = (orderId: string, action: "accept" | "reject" | "complete") => {
-    setOrders(prevOrders => 
-      prevOrders.map(order => {
-        if (order.id === orderId) {
-          let newStatus: Order["status"];
-          let estimatedTime = order.estimatedTime;
-          
-          switch (action) {
-            case "accept":
-              newStatus = "accepted";
-              estimatedTime = 20; // Default 20 minutes
-              break;
-            case "reject":
-              newStatus = "rejected";
-              break;
-            case "complete":
-              newStatus = "completed";
-              break;
-            default:
-              newStatus = order.status;
-          }
-          
-          return { ...order, status: newStatus, estimatedTime };
-        }
-        return order;
+  useEffect(() => {
+    fetchOrders();
+    
+    // Subscribe to real-time updates
+    const ordersSubscription = supabase
+      .channel('kitchen-orders-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        fetchOrders();
       })
-    );
-  };
+      .subscribe();
 
-  const getTimeElapsed = (timestamp: Date) => {
-    const now = new Date();
-    const diff = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60));
-    return `${diff}m ago`;
-  };
+    return () => {
+      ordersSubscription.unsubscribe();
+    };
+  }, []);
 
-  const getStatusColor = (status: Order["status"]) => {
-    switch (status) {
-      case "pending": return "bg-warning text-warning-foreground";
-      case "accepted": return "bg-primary text-primary-foreground";
-      case "rejected": return "bg-destructive text-destructive-foreground";
-      case "completed": return "bg-success text-success-foreground";
-      default: return "bg-muted text-muted-foreground";
+  const fetchOrders = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          tables (table_number),
+          order_items (
+            quantity,
+            price_per_item,
+            menu_items (name)
+          )
+        `)
+        .in('status', ['pending', 'accepted', 'preparing', 'ready'])
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setOrders(data || []);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch orders",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const pendingOrders = orders.filter(order => order.status === "pending");
-  const activeOrders = orders.filter(order => order.status === "accepted");
-  const completedOrders = orders.filter(order => order.status === "completed");
+  const updateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ 
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Order Updated",
+        description: `Order status changed to ${newStatus}`,
+      });
+
+      fetchOrders();
+    } catch (error) {
+      console.error('Error updating order:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update order status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const getStatusColor = (status: Order['status']) => {
+    switch (status) {
+      case 'pending': return 'bg-warning text-warning-foreground';
+      case 'accepted': return 'bg-primary text-primary-foreground';
+      case 'preparing': return 'bg-secondary text-secondary-foreground';
+      case 'ready': return 'bg-success text-success-foreground';
+      case 'completed': return 'bg-success text-success-foreground';
+      case 'cancelled': return 'bg-destructive text-destructive-foreground';
+      default: return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading kitchen orders...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
-      <header className="bg-card border-b shadow-soft">
+      {/* Header */}
+      <header className="bg-card border-b shadow-soft sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-                Kitchen Dashboard
-              </h1>
-              <p className="text-muted-foreground">Manage incoming orders</p>
-            </div>
-            
-            <div className="flex gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-warning">{pendingOrders.length}</div>
-                <div className="text-xs text-muted-foreground">Pending</div>
+            <div className="flex items-center gap-4">
+              <Button variant="outline" onClick={onBack}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
+                  Kitchen Dashboard
+                </h1>
+                <p className="text-muted-foreground text-sm">Order Management System</p>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-primary">{activeOrders.length}</div>
-                <div className="text-xs text-muted-foreground">Active</div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-sm text-muted-foreground">Active Orders</p>
+                <p className="text-2xl font-bold text-primary">{orders.length}</p>
               </div>
             </div>
           </div>
@@ -127,136 +158,106 @@ export const KitchenInterface = () => {
       </header>
 
       <div className="container mx-auto px-4 py-6">
-        {/* Pending Orders */}
-        {pendingOrders.length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-warning" />
-              Pending Orders ({pendingOrders.length})
-            </h2>
-            
-            <div className="grid gap-4">
-              {pendingOrders.map((order) => (
-                <Card key={order.id} className="border-warning/50 shadow-elegant">
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          <Users className="w-4 h-4" />
-                          Table {order.tableNumber}
-                        </CardTitle>
-                        <CardDescription>
-                          Order #{order.id} • {getTimeElapsed(order.timestamp)}
-                        </CardDescription>
+        {orders.length > 0 ? (
+          <div className="grid gap-6">
+            {orders.map((order) => (
+              <Card key={order.id} className="hover:shadow-elegant transition-smooth animate-fade-in">
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Table {order.tables.table_number} - {order.customer_name || 'Guest'}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(order.created_at).toLocaleTimeString()}
+                      </p>
+                    </div>
+                    <Badge className={getStatusColor(order.status)}>
+                      {order.status}
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-2 mb-4">
+                    {order.order_items.map((item, index) => (
+                      <div key={index} className="flex justify-between">
+                        <span className="text-sm">
+                          {item.menu_items.name} x{item.quantity}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          ${(item.price_per_item * item.quantity).toFixed(2)}
+                        </span>
                       </div>
-                      <Badge className={getStatusColor(order.status)}>
-                        {order.status.toUpperCase()}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  
-                  <CardContent>
-                    <div className="space-y-2 mb-4">
-                      {order.items.map((item, index) => (
-                        <div key={index} className="flex justify-between">
-                          <span>{item.quantity}x {item.name}</span>
-                          {item.notes && (
-                            <span className="text-sm text-muted-foreground italic">
-                              {item.notes}
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    ))}
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="font-semibold">Total:</span>
+                    <span className="font-bold text-primary">
+                      ${order.total_amount.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    {order.status === 'pending' && (
+                      <>
+                        <Button 
+                          onClick={() => updateOrderStatus(order.id, 'accepted')}
+                          className="flex-1"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Accept Order
+                        </Button>
+                        <Button 
+                          variant="destructive"
+                          onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                          className="flex-1"
+                        >
+                          <X className="w-4 h-4 mr-2" />
+                          Reject
+                        </Button>
+                      </>
+                    )}
                     
-                    <Separator className="my-3" />
-                    
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="font-medium">Total: ${order.totalAmount.toFixed(2)}</span>
-                    </div>
-                    
-                    <div className="flex gap-2">
+                    {order.status === 'accepted' && (
                       <Button 
-                        variant="success" 
-                        onClick={() => handleOrderAction(order.id, "accept")}
-                        className="flex-1"
+                        onClick={() => updateOrderStatus(order.id, 'preparing')}
+                        className="w-full"
+                      >
+                        <Clock className="w-4 h-4 mr-2" />
+                        Start Preparing
+                      </Button>
+                    )}
+                    
+                    {order.status === 'preparing' && (
+                      <Button 
+                        variant="success"
+                        onClick={() => updateOrderStatus(order.id, 'ready')}
+                        className="w-full"
                       >
                         <CheckCircle className="w-4 h-4 mr-2" />
-                        Accept Order
+                        Mark as Ready
                       </Button>
-                      <Button 
-                        variant="destructive" 
-                        onClick={() => handleOrderAction(order.id, "reject")}
-                        className="flex-1"
-                      >
-                        <XCircle className="w-4 h-4 mr-2" />
-                        Reject
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </section>
-        )}
+                    )}
 
-        {/* Active Orders */}
-        {activeOrders.length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-primary" />
-              Active Orders ({activeOrders.length})
-            </h2>
-            
-            <div className="grid gap-4">
-              {activeOrders.map((order) => (
-                <Card key={order.id} className="border-primary/50 shadow-elegant">
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          <Users className="w-4 h-4" />
-                          Table {order.tableNumber}
-                        </CardTitle>
-                        <CardDescription>
-                          Order #{order.id} • Est. {order.estimatedTime}min
-                        </CardDescription>
+                    {order.status === 'ready' && (
+                      <div className="w-full text-center p-2 bg-success/10 rounded-lg">
+                        <span className="text-success font-medium">Order Ready for Pickup</span>
                       </div>
-                      <Badge className={getStatusColor(order.status)}>
-                        IN PROGRESS
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  
-                  <CardContent>
-                    <div className="space-y-2 mb-4">
-                      {order.items.map((item, index) => (
-                        <div key={index} className="flex justify-between">
-                          <span>{item.quantity}x {item.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                    
-                    <Button 
-                      variant="success" 
-                      onClick={() => handleOrderAction(order.id, "complete")}
-                      className="w-full"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Mark as Complete
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {pendingOrders.length === 0 && activeOrders.length === 0 && (
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
           <div className="text-center py-12">
-            <div className="text-6xl mb-4">🍽️</div>
-            <h3 className="text-xl font-semibold mb-2">No active orders</h3>
-            <p className="text-muted-foreground">New orders will appear here when customers place them.</p>
+            <ChefHat className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+            <h3 className="text-lg font-semibold mb-2">No Active Orders</h3>
+            <p className="text-muted-foreground">
+              {orders.length === 0 ? 'No orders yet. Waiting for customers...' : 'All orders are completed. Great work, chef!'}
+            </p>
           </div>
         )}
       </div>

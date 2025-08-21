@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
 import { MenuCard } from "./MenuCard";
-import { ShoppingCart, Utensils, Coffee, Cake } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { ShoppingCart, Utensils, Coffee, Cake, ArrowLeft, User } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import burgerImage from "@/assets/food-burger.jpg";
 import saladImage from "@/assets/food-salad.jpg";
 import dessertImage from "@/assets/food-dessert.jpg";
@@ -14,6 +17,21 @@ interface CartItem {
   name: string;
   price: number;
   quantity: number;
+}
+
+interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  image_url: string | null;
+  category: string;
+  is_vegetarian: boolean;
+  is_available: boolean;
+}
+
+interface CustomerInterfaceProps {
+  onBack: () => void;
 }
 
 const MOCK_MENU = [
@@ -46,14 +64,67 @@ const MOCK_MENU = [
   }
 ];
 
-export const CustomerInterface = () => {
+export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState("All");
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [customerName, setCustomerName] = useState("");
+  const [showCart, setShowCart] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [placing, setPlacing] = useState(false);
+  const { toast } = useToast();
 
   const categories = ["All", "Main Course", "Salads", "Desserts", "Beverages"];
 
+  useEffect(() => {
+    fetchMenuItems();
+  }, []);
+
+  const fetchMenuItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .select('*')
+        .eq('is_available', true)
+        .order('category', { ascending: true });
+
+      if (error) throw error;
+      
+      // Use database items if available, otherwise fallback to mock data
+      if (data && data.length > 0) {
+        setMenuItems(data);
+      } else {
+        setMenuItems(MOCK_MENU.map(item => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          price: item.price,
+          image_url: item.image,
+          category: item.category,
+          is_vegetarian: item.isVegetarian,
+          is_available: true
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching menu items:', error);
+      // Fallback to mock data
+      setMenuItems(MOCK_MENU.map(item => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        price: item.price,
+        image_url: item.image,
+        category: item.category,
+        is_vegetarian: item.isVegetarian,
+        is_available: true
+      })));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleQuantityChange = (id: string, quantity: number) => {
-    const item = MOCK_MENU.find(item => item.id === id);
+    const item = menuItems.find(item => item.id === id);
     if (!item) return;
 
     setCart(prevCart => {
@@ -85,9 +156,178 @@ export const CustomerInterface = () => {
     return cart.reduce((total, item) => total + item.quantity, 0);
   };
 
+  const placeOrder = async () => {
+    if (cart.length === 0) return;
+    
+    setPlacing(true);
+    try {
+      // Get a random table (in real app, this would be from QR code)
+      const { data: tables } = await supabase
+        .from('tables')
+        .select('id')
+        .eq('status', 'available')
+        .limit(1);
+
+      const tableId = tables?.[0]?.id || 'table-1';
+      
+      // Create order
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert([{
+          table_id: tableId,
+          customer_name: customerName || null,
+          total_amount: getTotalPrice(),
+          status: 'pending'
+        }])
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Create order items
+      const orderItems = cart.map(item => ({
+        order_id: order.id,
+        menu_item_id: item.id,
+        quantity: item.quantity,
+        price_per_item: item.price
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      // Update table status
+      await supabase
+        .from('tables')
+        .update({ status: 'occupied' })
+        .eq('id', tableId);
+
+      toast({
+        title: "Order Placed Successfully!",
+        description: `Your order for $${getTotalPrice().toFixed(2)} has been sent to the kitchen.`,
+      });
+
+      setCart([]);
+      setCustomerName("");
+      setShowCart(false);
+    } catch (error) {
+      console.error('Error placing order:', error);
+      toast({
+        title: "Error",
+        description: "Failed to place order. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setPlacing(false);
+    }
+  };
+
   const filteredMenu = activeCategory === "All" 
-    ? MOCK_MENU 
-    : MOCK_MENU.filter(item => item.category === activeCategory);
+    ? menuItems 
+    : menuItems.filter(item => item.category === activeCategory);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading menu...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (showCart) {
+    return (
+      <div className="min-h-screen bg-gradient-subtle">
+        <header className="bg-card border-b shadow-soft sticky top-0 z-10">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button variant="outline" onClick={() => setShowCart(false)}>
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Menu
+                </Button>
+                <div>
+                  <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
+                    Your Cart
+                  </h1>
+                  <p className="text-muted-foreground text-sm">Review your order</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="container mx-auto px-4 py-6">
+          <div className="max-w-2xl mx-auto">
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="w-5 h-5" />
+                  Customer Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Input
+                  placeholder="Enter your name (optional)"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5" />
+                  Order Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4 mb-6">
+                  {cart.map((item) => (
+                    <div key={item.id} className="flex justify-between items-center p-4 border rounded-lg">
+                      <div>
+                        <h3 className="font-semibold">{item.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          ${item.price.toFixed(2)} × {item.quantity}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold">${(item.price * item.quantity).toFixed(2)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                
+                <Separator className="my-4" />
+                
+                <div className="flex justify-between items-center mb-6">
+                  <span className="text-xl font-bold">Total:</span>
+                  <span className="text-xl font-bold text-primary">
+                    ${getTotalPrice().toFixed(2)}
+                  </span>
+                </div>
+                
+                <Button 
+                  variant="hero" 
+                  className="w-full" 
+                  size="lg"
+                  onClick={placeOrder}
+                  disabled={placing}
+                >
+                  {placing ? 'Placing Order...' : 'Place Order'}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -95,15 +335,21 @@ export const CustomerInterface = () => {
       <header className="bg-card border-b shadow-soft sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-                SmartServe
-              </h1>
-              <p className="text-muted-foreground text-sm">Table #12</p>
+            <div className="flex items-center gap-4">
+              <Button variant="outline" onClick={onBack}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
+                  SmartServe
+                </h1>
+                <p className="text-muted-foreground text-sm">Table #12</p>
+              </div>
             </div>
             
             {getTotalItems() > 0 && (
-              <Button variant="hero" className="relative">
+              <Button variant="hero" className="relative" onClick={() => setShowCart(true)}>
                 <ShoppingCart className="w-4 h-4 mr-2" />
                 View Cart
                 <Badge className="absolute -top-2 -right-2 bg-success text-success-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs">
@@ -138,7 +384,13 @@ export const CustomerInterface = () => {
           {filteredMenu.map((item) => (
             <MenuCard
               key={item.id}
-              {...item}
+              id={item.id}
+              name={item.name}
+              description={item.description}
+              price={item.price}
+              image={item.image_url || burgerImage}
+              category={item.category}
+              isVegetarian={item.is_vegetarian}
               quantity={getCartQuantity(item.id)}
               onQuantityChange={handleQuantityChange}
             />
@@ -177,8 +429,13 @@ export const CustomerInterface = () => {
                 </span>
               </div>
               
-              <Button variant="hero" className="w-full" size="lg">
-                Place Order
+              <Button 
+                variant="hero" 
+                className="w-full" 
+                size="lg"
+                onClick={() => setShowCart(true)}
+              >
+                Review & Place Order
               </Button>
             </CardContent>
           </Card>
