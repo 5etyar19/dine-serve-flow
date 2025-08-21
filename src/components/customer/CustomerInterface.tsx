@@ -82,6 +82,23 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
 
   const fetchMenuItems = async () => {
     try {
+      // Check if Supabase is configured
+      if (!supabase) {
+        // Use mock data when Supabase isn't configured
+        setMenuItems(MOCK_MENU.map(item => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          price: item.price,
+          image_url: item.image,
+          category: item.category,
+          is_vegetarian: item.isVegetarian,
+          is_available: true
+        })));
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('menu_items')
         .select('*')
@@ -161,6 +178,19 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
     
     setPlacing(true);
     try {
+      // Check if Supabase is configured
+      if (!supabase) {
+        // Mock order placement
+        toast({
+          title: "Demo Order Placed!",
+          description: `Your order for $${getTotalPrice().toFixed(2)} has been simulated. Connect Supabase for real functionality.`,
+        });
+        setCart([]);
+        setCustomerName("");
+        setShowCart(false);
+        return;
+      }
+
       // Get a random table (in real app, this would be from QR code)
       const { data: tables } = await supabase
         .from('tables')

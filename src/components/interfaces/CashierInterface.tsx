@@ -42,21 +42,32 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
   useEffect(() => {
     fetchTablesAndOrders();
     
-    // Subscribe to real-time updates
-    const ordersSubscription = supabase
-      .channel('orders-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        fetchTablesAndOrders();
-      })
-      .subscribe();
+    // Subscribe to real-time updates only if Supabase is configured
+    if (supabase) {
+      const ordersSubscription = supabase
+        .channel('orders-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+          fetchTablesAndOrders();
+        })
+        .subscribe();
 
-    return () => {
-      ordersSubscription.unsubscribe();
-    };
+      return () => {
+        ordersSubscription.unsubscribe();
+      };
+    }
   }, []);
 
   const fetchTablesAndOrders = async () => {
     try {
+      // Check if Supabase is configured
+      if (!supabase) {
+        // Use mock data when Supabase isn't configured
+        setTables([]);
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
       // Fetch tables
       const { data: tablesData, error: tablesError } = await supabase
         .from('tables')
@@ -98,6 +109,15 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
 
   const processPayment = async (orderId: string) => {
     try {
+      // Check if Supabase is configured
+      if (!supabase) {
+        toast({
+          title: "Demo Mode",
+          description: "Connect Supabase to enable real payment processing",
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from('orders')
         .update({ 

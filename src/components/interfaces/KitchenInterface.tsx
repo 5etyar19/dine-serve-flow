@@ -35,21 +35,31 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
   useEffect(() => {
     fetchOrders();
     
-    // Subscribe to real-time updates
-    const ordersSubscription = supabase
-      .channel('kitchen-orders-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        fetchOrders();
-      })
-      .subscribe();
+    // Subscribe to real-time updates only if Supabase is configured
+    if (supabase) {
+      const ordersSubscription = supabase
+        .channel('kitchen-orders-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+          fetchOrders();
+        })
+        .subscribe();
 
-    return () => {
-      ordersSubscription.unsubscribe();
-    };
+      return () => {
+        ordersSubscription.unsubscribe();
+      };
+    }
   }, []);
 
   const fetchOrders = async () => {
     try {
+      // Check if Supabase is configured
+      if (!supabase) {
+        // Use mock data when Supabase isn't configured
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -80,6 +90,15 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
 
   const updateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
     try {
+      // Check if Supabase is configured
+      if (!supabase) {
+        toast({
+          title: "Demo Mode",
+          description: "Connect Supabase to enable real order management",
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from('orders')
         .update({ 

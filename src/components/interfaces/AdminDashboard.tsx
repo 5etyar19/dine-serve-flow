@@ -34,21 +34,31 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
   useEffect(() => {
     fetchOrders();
     
-    // Subscribe to real-time updates
-    const ordersSubscription = supabase
-      .channel('admin-orders-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        fetchOrders();
-      })
-      .subscribe();
+    // Subscribe to real-time updates only if Supabase is configured
+    if (supabase) {
+      const ordersSubscription = supabase
+        .channel('admin-orders-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+          fetchOrders();
+        })
+        .subscribe();
 
-    return () => {
-      ordersSubscription.unsubscribe();
-    };
+      return () => {
+        ordersSubscription.unsubscribe();
+      };
+    }
   }, []);
 
   const fetchOrders = async () => {
     try {
+      // Check if Supabase is configured
+      if (!supabase) {
+        // Use mock data when Supabase isn't configured
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('orders')
         .select(`
@@ -78,6 +88,15 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
   const initializeData = async () => {
     setInitializing(true);
     try {
+      // Check if Supabase is configured
+      if (!supabase) {
+        toast({
+          title: "Demo Mode",
+          description: "Connect Supabase to initialize database with sample data",
+        });
+        return;
+      }
+
       await Promise.all([
         insertTables(),
         insertMenuItems()

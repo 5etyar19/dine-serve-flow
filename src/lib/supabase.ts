@@ -4,14 +4,21 @@ import { Database } from './database.types'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables')
-}
+// Check if Supabase is configured
+export const isSupabaseConfigured = !!(supabaseUrl && supabaseKey)
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseKey)
+// Create client only if configured, otherwise create a mock client
+export const supabase = isSupabaseConfigured 
+  ? createClient<Database>(supabaseUrl, supabaseKey)
+  : null as any // Mock client - will be handled by fallbacks in components
 
 // Helper functions for common operations
 export const insertMenuItems = async () => {
+  if (!isSupabaseConfigured) {
+    console.warn('Supabase not configured, using mock data');
+    return { data: null, error: null };
+  }
+
   const menuItems = [
     {
       name: "Signature Gourmet Burger",
@@ -51,6 +58,11 @@ export const insertMenuItems = async () => {
 };
 
 export const insertTables = async () => {
+  if (!isSupabaseConfigured) {
+    console.warn('Supabase not configured, using mock data');
+    return { data: null, error: null };
+  }
+
   const tables = Array.from({ length: 20 }, (_, i) => ({
     table_number: i + 1,
     status: 'available' as const,
