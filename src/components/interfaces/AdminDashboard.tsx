@@ -5,9 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase, insertMenuItems, insertTables } from "@/lib/supabase";
-import { ArrowLeft, BarChart3, Users, DollarSign, TrendingUp, Clock, ChefHat, Plus, Edit, Trash2 } from "lucide-react";
+import { ArrowLeft, BarChart3, Users, DollarSign, TrendingUp, Clock, ChefHat, Plus, Edit, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useMenu } from "@/contexts/MenuContext";
 
 interface OrderAnalytics {
   id: string;
@@ -41,8 +43,6 @@ interface Category {
 interface Table {
   id: string;
   table_number: number;
-  capacity: number;
-  status: 'available' | 'occupied' | 'reserved';
 }
 
 interface AdminDashboardProps {
@@ -54,10 +54,9 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
   const [loading, setLoading] = useState(true);
   const [initializing, setInitializing] = useState(false);
   const { toast } = useToast();
+  const { menuItems, categories, setMenuItems, setCategories } = useMenu();
 
-  // New state for CRUD operations
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  // Local state for tables (not shared with customer interface)
   const [tables, setTables] = useState<Table[]>([]);
 
   // Form states
@@ -78,14 +77,8 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
     description: ''
   });
 
-  const [tableForm, setTableForm] = useState<{
-    table_number: number;
-    capacity: number;
-    status: 'available' | 'occupied' | 'reserved';
-  }>({
-    table_number: 0,
-    capacity: 0,
-    status: 'available'
+  const [tableForm, setTableForm] = useState({
+    table_number: 0
   });
 
   useEffect(() => {
@@ -108,22 +101,16 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
   }, []);
 
   const initializeMockData = () => {
-    // Initialize with some mock data
-    setCategories([
-      { id: '1', name: 'Appetizers', description: 'Start your meal right' },
-      { id: '2', name: 'Main Courses', description: 'Hearty main dishes' },
-      { id: '3', name: 'Desserts', description: 'Sweet endings' }
-    ]);
-
+    // Initialize with some mock data - Categories are already initialized in context
     setMenuItems([
-      { id: '1', name: 'Caesar Salad', description: 'Fresh romaine lettuce with parmesan', price: 12.99, category: 'Appetizers', image_url: '/api/placeholder/300/200' },
-      { id: '2', name: 'Grilled Salmon', description: 'Atlantic salmon with herbs', price: 24.99, category: 'Main Courses', image_url: '/api/placeholder/300/200' }
+      { id: '1', name: 'Caesar Salad', description: 'Fresh romaine lettuce with parmesan', price: 12.99, category: 'Salads', image_url: '/api/placeholder/300/200' },
+      { id: '2', name: 'Grilled Salmon', description: 'Atlantic salmon with herbs', price: 24.99, category: 'Main Course', image_url: '/api/placeholder/300/200' }
     ]);
 
     setTables([
-      { id: '1', table_number: 1, capacity: 4, status: 'available' },
-      { id: '2', table_number: 2, capacity: 2, status: 'occupied' },
-      { id: '3', table_number: 3, capacity: 6, status: 'reserved' }
+      { id: '1', table_number: 1 },
+      { id: '2', table_number: 2 },
+      { id: '3', table_number: 3 }
     ]);
   };
 
@@ -274,7 +261,7 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
       ...tableForm
     };
     setTables([...tables, newTable]);
-    setTableForm({ table_number: 0, capacity: 0, status: 'available' });
+    setTableForm({ table_number: 0 });
     toast({ title: "Success", description: "Table created successfully" });
   };
 
@@ -284,7 +271,7 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
       table.id === editingTable.id ? { ...editingTable, ...tableForm } : table
     ));
     setEditingTable(null);
-    setTableForm({ table_number: 0, capacity: 0, status: 'available' });
+    setTableForm({ table_number: 0 });
     toast({ title: "Success", description: "Table updated successfully" });
   };
 
@@ -296,9 +283,7 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
   const startEditingTable = (table: Table) => {
     setEditingTable(table);
     setTableForm({
-      table_number: table.table_number,
-      capacity: table.capacity,
-      status: table.status
+      table_number: table.table_number
     });
   };
 
@@ -616,21 +601,51 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                   </div>
                   <div>
                     <Label htmlFor="item-category">Category</Label>
-                    <Input
-                      id="item-category"
-                      value={itemForm.category}
-                      onChange={(e) => setItemForm({...itemForm, category: e.target.value})}
-                      placeholder="Category"
-                    />
+                    <Select value={itemForm.category} onValueChange={(value) => setItemForm({...itemForm, category: value})}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((category) => (
+                          <SelectItem key={category.id} value={category.name}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
-                    <Label htmlFor="item-image">Image URL</Label>
-                    <Input
-                      id="item-image"
-                      value={itemForm.image_url}
-                      onChange={(e) => setItemForm({...itemForm, image_url: e.target.value})}
-                      placeholder="Image URL"
-                    />
+                    <Label htmlFor="item-image">Image</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="item-image"
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            // In a real app, you'd upload this to a server
+                            // For now, just use the file name as placeholder
+                            setItemForm({...itemForm, image_url: URL.createObjectURL(file)});
+                          }
+                        }}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('item-image')?.click()}
+                        className="flex-1"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {itemForm.image_url ? 'Change Image' : 'Upload Image'}
+                      </Button>
+                    </div>
+                    {itemForm.image_url && (
+                      <div className="mt-2">
+                        <img src={itemForm.image_url} alt="Preview" className="w-20 h-20 object-cover rounded" />
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Button 
@@ -801,29 +816,6 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                       placeholder="Table number"
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="table-capacity">Capacity</Label>
-                    <Input
-                      id="table-capacity"
-                      type="number"
-                      value={tableForm.capacity}
-                      onChange={(e) => setTableForm({...tableForm, capacity: parseInt(e.target.value) || 0})}
-                      placeholder="Number of seats"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="table-status">Status</Label>
-                    <select
-                      id="table-status"
-                      value={tableForm.status}
-                      onChange={(e) => setTableForm({...tableForm, status: e.target.value as 'available' | 'occupied' | 'reserved'})}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
-                      <option value="available">Available</option>
-                      <option value="occupied">Occupied</option>
-                      <option value="reserved">Reserved</option>
-                    </select>
-                  </div>
                   <div className="flex gap-2">
                     <Button 
                       onClick={editingTable ? handleUpdateTable : handleCreateTable}
@@ -836,7 +828,7 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                         variant="outline" 
                         onClick={() => {
                           setEditingTable(null);
-                          setTableForm({ table_number: 0, capacity: 0, status: 'available' });
+                          setTableForm({ table_number: 0 });
                         }}
                       >
                         Cancel
@@ -857,10 +849,6 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                       <div key={table.id} className="flex items-center justify-between p-3 border rounded-lg">
                         <div className="flex-1">
                           <p className="font-medium">Table {table.table_number}</p>
-                          <p className="text-sm text-muted-foreground">Capacity: {table.capacity} people</p>
-                          <Badge className={`mt-1 ${getTableStatusColor(table.status)}`}>
-                            {table.status}
-                          </Badge>
                         </div>
                         <div className="flex gap-2">
                           <Button

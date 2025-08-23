@@ -8,6 +8,7 @@ import { MenuCard } from "./MenuCard";
 import { supabase } from "@/lib/supabase";
 import { ShoppingCart, Utensils, Coffee, Cake, ArrowLeft, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useMenu } from "@/contexts/MenuContext";
 import burgerImage from "@/assets/food-burger.jpg";
 import saladImage from "@/assets/food-salad.jpg";
 import dessertImage from "@/assets/food-dessert.jpg";
@@ -67,14 +68,15 @@ const MOCK_MENU = [
 export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState("All");
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [showCart, setShowCart] = useState(false);
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const { toast } = useToast();
+  const { menuItems, categories, setMenuItems } = useMenu();
 
-  const categories = ["All", "Main Course", "Salads", "Desserts", "Beverages"];
+  // Create dynamic categories list including "All" and actual categories
+  const categoryList = ["All", ...categories.map(cat => cat.name)];
 
   useEffect(() => {
     fetchMenuItems();
@@ -394,7 +396,7 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
       <div className="container mx-auto px-4 py-6">
         {/* Category Filters */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {categories.map((category) => (
+          {categoryList.map((category) => (
             <Button
               key={category}
               variant={activeCategory === category ? "default" : "outline"}
