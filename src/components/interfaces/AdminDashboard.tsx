@@ -78,10 +78,14 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
     description: ''
   });
 
-  const [tableForm, setTableForm] = useState({
+  const [tableForm, setTableForm] = useState<{
+    table_number: number;
+    capacity: number;
+    status: 'available' | 'occupied' | 'reserved';
+  }>({
     table_number: 0,
     capacity: 0,
-    status: 'available' as const
+    status: 'available'
   });
 
   useEffect(() => {
