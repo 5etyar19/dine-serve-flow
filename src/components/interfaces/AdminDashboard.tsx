@@ -1,3 +1,4 @@
+// AdminDashboard.tsx (Supabase removed)
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { supabase, insertMenuItems, insertTables } from "@/lib/supabase";
 import { ArrowLeft, BarChart3, Users, DollarSign, TrendingUp, Clock, ChefHat, Plus, Edit, Trash2, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMenu } from "@/contexts/MenuContext";
@@ -19,10 +19,7 @@ interface OrderAnalytics {
   status: string;
   created_at: string;
   tables: { table_number: number };
-  order_items: Array<{
-    quantity: number;
-    menu_items: { name: string };
-  }>;
+  order_items: Array<{ quantity: number; menu_items: { name: string } }>;
 }
 
 interface MenuItem {
@@ -56,95 +53,45 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
   const { toast } = useToast();
   const { menuItems, categories, setMenuItems, setCategories } = useMenu();
 
-  // Local state for tables (not shared with customer interface)
+  // Local tables (admin-only)
   const [tables, setTables] = useState<Table[]>([]);
 
-  // Form states
+  // Editing state
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [editingTable, setEditingTable] = useState<Table | null>(null);
 
-  const [itemForm, setItemForm] = useState({
-    name: '',
-    description: '',
-    price: 0,
-    category: '',
-    image_url: ''
-  });
-
-  const [categoryForm, setCategoryForm] = useState({
-    name: '',
-    description: ''
-  });
-
-  const [tableForm, setTableForm] = useState({
-    table_number: 0
-  });
+  // Forms
+  const [itemForm, setItemForm] = useState({ name: "", description: "", price: 0, category: "", image_url: "" });
+  const [categoryForm, setCategoryForm] = useState({ name: "", description: "" });
+  const [tableForm, setTableForm] = useState({ table_number: 0 });
 
   useEffect(() => {
     fetchOrders();
     initializeMockData();
-    
-    // Subscribe to real-time updates only if Supabase is configured
-    if (supabase) {
-      const ordersSubscription = supabase
-        .channel('admin-orders-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-          fetchOrders();
-        })
-        .subscribe();
-
-      return () => {
-        ordersSubscription.unsubscribe();
-      };
-    }
+    // (Realtime removed)
   }, []);
 
   const initializeMockData = () => {
-    // Initialize with some mock data - Categories are already initialized in context
     setMenuItems([
-      { id: '1', name: 'Caesar Salad', description: 'Fresh romaine lettuce with parmesan', price: 12.99, category: 'Salads', image_url: '/api/placeholder/300/200' },
-      { id: '2', name: 'Grilled Salmon', description: 'Atlantic salmon with herbs', price: 24.99, category: 'Main Course', image_url: '/api/placeholder/300/200' }
+      { id: "1", name: "Caesar Salad", description: "Fresh romaine lettuce with parmesan", price: 12.99, category: "Salads", image_url: "/api/placeholder/300/200" },
+      { id: "2", name: "Grilled Salmon", description: "Atlantic salmon with herbs", price: 24.99, category: "Main Course", image_url: "/api/placeholder/300/200" },
     ]);
 
     setTables([
-      { id: '1', table_number: 1 },
-      { id: '2', table_number: 2 },
-      { id: '3', table_number: 3 }
+      { id: "1", table_number: 1 },
+      { id: "2", table_number: 2 },
+      { id: "3", table_number: 3 },
     ]);
   };
 
   const fetchOrders = async () => {
     try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        // Use mock data when Supabase isn't configured
-        setOrders([]);
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          tables (table_number),
-          order_items (
-            quantity,
-            menu_items (name)
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setOrders(data || []);
+      // Demo mode: no backend, so show empty list
+      setOrders([]);
     } catch (error) {
-      console.error('Error fetching orders:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch orders",
-        variant: "destructive",
-      });
+      console.error("Error fetching orders:", error);
+      toast({ title: "Error", description: "Failed to fetch orders", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -153,113 +100,71 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
   const initializeData = async () => {
     setInitializing(true);
     try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        toast({
-          title: "Demo Mode",
-          description: "Connect Supabase to initialize database with sample data",
-        });
-        return;
-      }
-
-      await Promise.all([
-        insertTables(),
-        insertMenuItems()
-      ]);
-      
-      toast({
-        title: "Success",
-        description: "Database initialized with sample data",
-      });
+      // Demo mode: no-op
+      toast({ title: "Demo Mode", description: "Backend removed. Seeding is a no-op." });
     } catch (error) {
-      console.error('Error initializing data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to initialize data",
-        variant: "destructive",
-      });
+      console.error("Error initializing data:", error);
+      toast({ title: "Error", description: "Failed to initialize data", variant: "destructive" });
     } finally {
       setInitializing(false);
     }
   };
 
-  // CRUD operations for Items
+  // -------- Items CRUD (local) --------
   const handleCreateItem = () => {
-    const newItem: MenuItem = {
-      id: Date.now().toString(),
-      ...itemForm
-    };
+    const newItem: MenuItem = { id: Date.now().toString(), ...itemForm };
     setMenuItems([...menuItems, newItem]);
-    setItemForm({ name: '', description: '', price: 0, category: '', image_url: '' });
+    setItemForm({ name: "", description: "", price: 0, category: "", image_url: "" });
     toast({ title: "Success", description: "Item created successfully" });
   };
 
   const handleUpdateItem = () => {
     if (!editingItem) return;
-    setMenuItems(menuItems.map(item => 
-      item.id === editingItem.id ? { ...editingItem, ...itemForm } : item
-    ));
+    setMenuItems(menuItems.map((it) => (it.id === editingItem.id ? { ...editingItem, ...itemForm } : it)));
     setEditingItem(null);
-    setItemForm({ name: '', description: '', price: 0, category: '', image_url: '' });
+    setItemForm({ name: "", description: "", price: 0, category: "", image_url: "" });
     toast({ title: "Success", description: "Item updated successfully" });
   };
 
   const handleDeleteItem = (id: string) => {
-    setMenuItems(menuItems.filter(item => item.id !== id));
+    setMenuItems(menuItems.filter((it) => it.id !== id));
     toast({ title: "Success", description: "Item deleted successfully" });
   };
 
   const startEditingItem = (item: MenuItem) => {
     setEditingItem(item);
-    setItemForm({
-      name: item.name,
-      description: item.description,
-      price: item.price,
-      category: item.category,
-      image_url: item.image_url
-    });
+    setItemForm({ name: item.name, description: item.description, price: item.price, category: item.category, image_url: item.image_url });
   };
 
-  // CRUD operations for Categories
+  // -------- Categories CRUD (local) --------
   const handleCreateCategory = () => {
-    const newCategory: Category = {
-      id: Date.now().toString(),
-      ...categoryForm
-    };
+    const newCategory: Category = { id: Date.now().toString(), ...categoryForm };
     setCategories([...categories, newCategory]);
-    setCategoryForm({ name: '', description: '' });
+    setCategoryForm({ name: "", description: "" });
     toast({ title: "Success", description: "Category created successfully" });
   };
 
   const handleUpdateCategory = () => {
     if (!editingCategory) return;
-    setCategories(categories.map(category => 
-      category.id === editingCategory.id ? { ...editingCategory, ...categoryForm } : category
-    ));
+    setCategories(categories.map((c) => (c.id === editingCategory.id ? { ...editingCategory, ...categoryForm } : c)));
     setEditingCategory(null);
-    setCategoryForm({ name: '', description: '' });
+    setCategoryForm({ name: "", description: "" });
     toast({ title: "Success", description: "Category updated successfully" });
   };
 
   const handleDeleteCategory = (id: string) => {
-    setCategories(categories.filter(category => category.id !== id));
+    setCategories(categories.filter((c) => c.id !== id));
     toast({ title: "Success", description: "Category deleted successfully" });
   };
 
-  const startEditingCategory = (category: Category) => {
-    setEditingCategory(category);
-    setCategoryForm({
-      name: category.name,
-      description: category.description
-    });
+  const startEditingCategory = (c: Category) => {
+    setEditingCategory(c);
+    setCategoryForm({ name: c.name, description: c.description });
   };
 
-  // CRUD operations for Tables
+  // -------- Tables CRUD (local) --------
   const handleCreateTable = () => {
-    const newTable: Table = {
-      id: Date.now().toString(),
-      ...tableForm
-    };
+    const newTable: Table = { id: Date.now().toString(), ...tableForm };
     setTables([...tables, newTable]);
     setTableForm({ table_number: 0 });
     toast({ title: "Success", description: "Table created successfully" });
@@ -267,87 +172,57 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
 
   const handleUpdateTable = () => {
     if (!editingTable) return;
-    setTables(tables.map(table => 
-      table.id === editingTable.id ? { ...editingTable, ...tableForm } : table
-    ));
+    setTables(tables.map((t) => (t.id === editingTable.id ? { ...editingTable, ...tableForm } : t)));
     setEditingTable(null);
     setTableForm({ table_number: 0 });
     toast({ title: "Success", description: "Table updated successfully" });
   };
 
   const handleDeleteTable = (id: string) => {
-    setTables(tables.filter(table => table.id !== id));
+    setTables(tables.filter((t) => t.id !== id));
     toast({ title: "Success", description: "Table deleted successfully" });
   };
 
-  const startEditingTable = (table: Table) => {
-    setEditingTable(table);
-    setTableForm({
-      table_number: table.table_number
-    });
+  const startEditingTable = (t: Table) => {
+    setEditingTable(t);
+    setTableForm({ table_number: t.table_number });
   };
 
-  const getRecentOrders = () => {
-    return orders.slice(0, 10);
-  };
+  // -------- Analytics helpers --------
+  const getRecentOrders = () => orders.slice(0, 10);
 
   const getMostDemandedItems = () => {
-    const itemCounts: { [key: string]: number } = {};
-    
-    orders.forEach(order => {
-      order.order_items.forEach(item => {
-        const itemName = item.menu_items.name;
-        itemCounts[itemName] = (itemCounts[itemName] || 0) + item.quantity;
+    const itemCounts: Record<string, number> = {};
+    orders.forEach((o) => {
+      o.order_items.forEach((it) => {
+        const name = it.menu_items.name;
+        itemCounts[name] = (itemCounts[name] || 0) + it.quantity;
       });
     });
-
-    return Object.entries(itemCounts)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5);
+    return Object.entries(itemCounts).sort(([, a], [, b]) => b - a).slice(0, 5);
   };
 
-  const getTotalRevenue = () => {
-    return orders
-      .filter(order => order.status === 'completed')
-      .reduce((sum, order) => sum + order.total_amount, 0);
-  };
+  const getTotalRevenue = () =>
+    orders.filter((o) => o.status === "completed").reduce((sum, o) => sum + o.total_amount, 0);
 
   const getOrdersByStatus = () => {
-    const statusCounts = {
-      pending: 0,
-      accepted: 0,
-      preparing: 0,
-      ready: 0,
-      completed: 0,
-      cancelled: 0
-    };
-
-    orders.forEach(order => {
-      statusCounts[order.status as keyof typeof statusCounts] = 
-        (statusCounts[order.status as keyof typeof statusCounts] || 0) + 1;
+    const statusCounts = { pending: 0, accepted: 0, preparing: 0, ready: 0, completed: 0, cancelled: 0 };
+    orders.forEach((o) => {
+      const k = o.status as keyof typeof statusCounts;
+      statusCounts[k] = (statusCounts[k] || 0) + 1;
     });
-
     return statusCounts;
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-warning text-warning-foreground';
-      case 'accepted': return 'bg-primary text-primary-foreground';
-      case 'preparing': return 'bg-secondary text-secondary-foreground';
-      case 'ready': return 'bg-success text-success-foreground';
-      case 'completed': return 'bg-success text-success-foreground';
-      case 'cancelled': return 'bg-destructive text-destructive-foreground';
-      default: return 'bg-muted text-muted-foreground';
-    }
-  };
-
-  const getTableStatusColor = (status: string) => {
-    switch (status) {
-      case 'available': return 'bg-success text-success-foreground';
-      case 'occupied': return 'bg-warning text-warning-foreground';
-      case 'reserved': return 'bg-primary text-primary-foreground';
-      default: return 'bg-muted text-muted-foreground';
+      case "pending": return "bg-warning text-warning-foreground";
+      case "accepted": return "bg-primary text-primary-foreground";
+      case "preparing": return "bg-secondary text-secondary-foreground";
+      case "ready": return "bg-success text-success-foreground";
+      case "completed": return "bg-success text-success-foreground";
+      case "cancelled": return "bg-destructive text-destructive-foreground";
+      default: return "bg-muted text-muted-foreground";
     }
   };
 
@@ -379,75 +254,41 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                 Back
               </Button>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-                  Admin Dashboard
-                </h1>
+                <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">Admin Dashboard</h1>
                 <p className="text-muted-foreground text-sm">Restaurant Management & Analytics</p>
               </div>
             </div>
-            <Button 
-              onClick={initializeData}
-              disabled={initializing}
-              variant="outline"
-            >
-              {initializing ? 'Initializing...' : 'Initialize Data'}
+            <Button onClick={initializeData} disabled={initializing} variant="outline">
+              {initializing ? "Initializing..." : "Initialize Data"}
             </Button>
           </div>
         </div>
       </header>
 
       <div className="container mx-auto px-4 py-6">
-        {/* Statistics Cards */}
+        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Orders</p>
-                  <p className="text-2xl font-bold">{orders.length}</p>
-                </div>
-                <BarChart3 className="w-8 h-8 text-primary" />
-              </div>
-            </CardContent>
-          </Card>
+          <Card><CardContent className="p-6"><div className="flex items-center justify-between">
+            <div><p className="text-sm text-muted-foreground">Total Orders</p><p className="text-2xl font-bold">{orders.length}</p></div>
+            <BarChart3 className="w-8 h-8 text-primary" />
+          </div></CardContent></Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Revenue</p>
-                  <p className="text-2xl font-bold">${totalRevenue.toFixed(2)}</p>
-                </div>
-                <DollarSign className="w-8 h-8 text-success" />
-              </div>
-            </CardContent>
-          </Card>
+          <Card><CardContent className="p-6"><div className="flex items-center justify-between">
+            <div><p className="text-sm text-muted-foreground">Total Revenue</p><p className="text-2xl font-bold">${totalRevenue.toFixed(2)}</p></div>
+            <DollarSign className="w-8 h-8 text-success" />
+          </div></CardContent></Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Active Orders</p>
-                  <p className="text-2xl font-bold">
-                    {ordersByStatus.pending + ordersByStatus.accepted + ordersByStatus.preparing + ordersByStatus.ready}
-                  </p>
-                </div>
-                <ChefHat className="w-8 h-8 text-warning" />
-              </div>
-            </CardContent>
-          </Card>
+          <Card><CardContent className="p-6"><div className="flex items-center justify-between">
+            <div><p className="text-sm text-muted-foreground">Active Orders</p>
+              <p className="text-2xl font-bold">{ordersByStatus.pending + ordersByStatus.accepted + ordersByStatus.preparing + ordersByStatus.ready}</p>
+            </div>
+            <ChefHat className="w-8 h-8 text-warning" />
+          </div></CardContent></Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Completed Today</p>
-                  <p className="text-2xl font-bold">{ordersByStatus.completed}</p>
-                </div>
-                <TrendingUp className="w-8 h-8 text-primary" />
-              </div>
-            </CardContent>
-          </Card>
+          <Card><CardContent className="p-6"><div className="flex items-center justify-between">
+            <div><p className="text-sm text-muted-foreground">Completed Today</p><p className="text-2xl font-bold">{ordersByStatus.completed}</p></div>
+            <TrendingUp className="w-8 h-8 text-primary" />
+          </div></CardContent></Card>
         </div>
 
         <Tabs defaultValue="orders" className="space-y-6">
@@ -460,14 +301,10 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
             <TabsTrigger value="tables">Tables</TabsTrigger>
           </TabsList>
 
+          {/* Orders */}
           <TabsContent value="orders">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Clock className="w-5 h-5" />
-                  Most Recent Orders
-                </CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Clock className="w-5 h-5" />Most Recent Orders</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {recentOrders.length > 0 ? recentOrders.map((order) => (
@@ -475,27 +312,16 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                       <CardContent className="p-4">
                         <div className="flex justify-between items-start mb-3">
                           <div>
-                            <p className="font-semibold">
-                              Table {order.tables.table_number} - {order.customer_name || 'Guest'}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(order.created_at).toLocaleString()}
-                            </p>
+                            <p className="font-semibold">Table {order.tables.table_number} - {order.customer_name || "Guest"}</p>
+                            <p className="text-sm text-muted-foreground">{new Date(order.created_at).toLocaleString()}</p>
                           </div>
                           <div className="text-right">
-                            <Badge className={getStatusColor(order.status)}>
-                              {order.status}
-                            </Badge>
-                            <p className="text-lg font-bold text-primary mt-1">
-                              ${order.total_amount.toFixed(2)}
-                            </p>
+                            <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
+                            <p className="text-lg font-bold text-primary mt-1">${order.total_amount.toFixed(2)}</p>
                           </div>
                         </div>
-
                         <div className="text-sm text-muted-foreground">
-                          Items: {order.order_items.map(item => 
-                            `${item.menu_items.name} (${item.quantity})`
-                          ).join(', ')}
+                          Items: {order.order_items.map((i) => `${i.menu_items.name} (${i.quantity})`).join(", ")}
                         </div>
                       </CardContent>
                     </Card>
@@ -510,27 +336,21 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
             </Card>
           </TabsContent>
 
+          {/* Analytics */}
           <TabsContent value="analytics">
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5" />
-                  Most Demanded Items
-                </CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5" />Most Demanded Items</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {mostDemandedItems.length > 0 ? mostDemandedItems.map(([itemName, count], index) => (
-                    <div key={itemName} className="flex items-center justify-between p-4 border rounded-lg">
+                  {mostDemandedItems.length > 0 ? mostDemandedItems.map(([name, count], idx) => (
+                    <div key={name} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                          <span className="text-sm font-bold text-primary">#{index + 1}</span>
+                          <span className="text-sm font-bold text-primary">#{idx + 1}</span>
                         </div>
-                        <span className="font-medium">{itemName}</span>
+                        <span className="font-medium">{name}</span>
                       </div>
-                      <Badge variant="outline">
-                        {count} orders
-                      </Badge>
+                      <Badge variant="outline">{count} orders</Badge>
                     </div>
                   )) : (
                     <div className="text-center py-8">
@@ -543,14 +363,13 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
             </Card>
           </TabsContent>
 
+          {/* Status */}
           <TabsContent value="status">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {Object.entries(ordersByStatus).map(([status, count]) => (
                 <Card key={status}>
                   <CardContent className="p-6 text-center">
-                    <Badge className={`mb-4 ${getStatusColor(status)}`}>
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
-                    </Badge>
+                    <Badge className={`mb-4 ${getStatusColor(status)}`}>{status.charAt(0).toUpperCase() + status.slice(1)}</Badge>
                     <p className="text-3xl font-bold">{count}</p>
                     <p className="text-sm text-muted-foreground">Orders</p>
                   </CardContent>
@@ -559,109 +378,52 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
             </div>
           </TabsContent>
 
+          {/* Items */}
           <TabsContent value="items">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Item Form */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Plus className="w-5 h-5" />
-                    {editingItem ? 'Edit Item' : 'Add New Item'}
-                  </CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5" />{editingItem ? "Edit Item" : "Add New Item"}</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="item-name">Name</Label>
-                    <Input
-                      id="item-name"
-                      value={itemForm.name}
-                      onChange={(e) => setItemForm({...itemForm, name: e.target.value})}
-                      placeholder="Item name"
-                    />
+                  <div><Label htmlFor="item-name">Name</Label>
+                    <Input id="item-name" value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} placeholder="Item name" />
                   </div>
-                  <div>
-                    <Label htmlFor="item-description">Description</Label>
-                    <Input
-                      id="item-description"
-                      value={itemForm.description}
-                      onChange={(e) => setItemForm({...itemForm, description: e.target.value})}
-                      placeholder="Item description"
-                    />
+                  <div><Label htmlFor="item-description">Description</Label>
+                    <Input id="item-description" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} placeholder="Item description" />
                   </div>
-                  <div>
-                    <Label htmlFor="item-price">Price</Label>
-                    <Input
-                      id="item-price"
-                      type="number"
-                      step="0.01"
-                      value={itemForm.price}
-                      onChange={(e) => setItemForm({...itemForm, price: parseFloat(e.target.value) || 0})}
-                      placeholder="0.00"
-                    />
+                  <div><Label htmlFor="item-price">Price</Label>
+                    <Input id="item-price" type="number" step="0.01" value={itemForm.price} onChange={(e) => setItemForm({ ...itemForm, price: parseFloat(e.target.value) || 0 })} placeholder="0.00" />
                   </div>
                   <div>
                     <Label htmlFor="item-category">Category</Label>
-                    <Select value={itemForm.category} onValueChange={(value) => setItemForm({...itemForm, category: value})}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
+                    <Select value={itemForm.category} onValueChange={(v) => setItemForm({ ...itemForm, category: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                       <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.name}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
+                        {categories.map((c) => (<SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
                     <Label htmlFor="item-image">Image</Label>
                     <div className="flex gap-2">
-                      <Input
-                        id="item-image"
-                        type="file"
-                        accept="image/*"
+                      <Input id="item-image" type="file" accept="image/*"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
-                          if (file) {
-                            // In a real app, you'd upload this to a server
-                            // For now, just use the file name as placeholder
-                            setItemForm({...itemForm, image_url: URL.createObjectURL(file)});
-                          }
+                          if (file) setItemForm({ ...itemForm, image_url: URL.createObjectURL(file) });
                         }}
                         className="hidden"
                       />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => document.getElementById('item-image')?.click()}
-                        className="flex-1"
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        {itemForm.image_url ? 'Change Image' : 'Upload Image'}
+                      <Button type="button" variant="outline" onClick={() => document.getElementById("item-image")?.click()} className="flex-1">
+                        <Upload className="w-4 h-4 mr-2" />{itemForm.image_url ? "Change Image" : "Upload Image"}
                       </Button>
                     </div>
-                    {itemForm.image_url && (
-                      <div className="mt-2">
-                        <img src={itemForm.image_url} alt="Preview" className="w-20 h-20 object-cover rounded" />
-                      </div>
-                    )}
+                    {itemForm.image_url && (<div className="mt-2"><img src={itemForm.image_url} alt="Preview" className="w-20 h-20 object-cover rounded" /></div>)}
                   </div>
                   <div className="flex gap-2">
-                    <Button 
-                      onClick={editingItem ? handleUpdateItem : handleCreateItem}
-                      className="flex-1"
-                    >
-                      {editingItem ? 'Update Item' : 'Create Item'}
+                    <Button onClick={editingItem ? handleUpdateItem : handleCreateItem} className="flex-1">
+                      {editingItem ? "Update Item" : "Create Item"}
                     </Button>
                     {editingItem && (
-                      <Button 
-                        variant="outline" 
-                        onClick={() => {
-                          setEditingItem(null);
-                          setItemForm({ name: '', description: '', price: 0, category: '', image_url: '' });
-                        }}
-                      >
+                      <Button variant="outline" onClick={() => { setEditingItem(null); setItemForm({ name: "", description: "", price: 0, category: "", image_url: "" }); }}>
                         Cancel
                       </Button>
                     )}
@@ -669,11 +431,8 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                 </CardContent>
               </Card>
 
-              {/* Items List */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Menu Items ({menuItems.length})</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle>Menu Items ({menuItems.length})</CardTitle></CardHeader>
                 <CardContent>
                   <div className="space-y-3 max-h-96 overflow-y-auto">
                     {menuItems.map((item) => (
@@ -684,20 +443,8 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                           <p className="text-sm font-medium text-primary">${item.price.toFixed(2)} • {item.category}</p>
                         </div>
                         <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => startEditingItem(item)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDeleteItem(item.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => startEditingItem(item)}><Edit className="w-4 h-4" /></Button>
+                          <Button size="sm" variant="outline" onClick={() => handleDeleteItem(item.id)}><Trash2 className="w-4 h-4" /></Button>
                         </div>
                       </div>
                     ))}
@@ -707,50 +454,24 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
             </div>
           </TabsContent>
 
+          {/* Categories */}
           <TabsContent value="categories">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Category Form */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Plus className="w-5 h-5" />
-                    {editingCategory ? 'Edit Category' : 'Add New Category'}
-                  </CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5" />{editingCategory ? "Edit Category" : "Add New Category"}</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="category-name">Name</Label>
-                    <Input
-                      id="category-name"
-                      value={categoryForm.name}
-                      onChange={(e) => setCategoryForm({...categoryForm, name: e.target.value})}
-                      placeholder="Category name"
-                    />
+                  <div><Label htmlFor="category-name">Name</Label>
+                    <Input id="category-name" value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} placeholder="Category name" />
                   </div>
-                  <div>
-                    <Label htmlFor="category-description">Description</Label>
-                    <Input
-                      id="category-description"
-                      value={categoryForm.description}
-                      onChange={(e) => setCategoryForm({...categoryForm, description: e.target.value})}
-                      placeholder="Category description"
-                    />
+                  <div><Label htmlFor="category-description">Description</Label>
+                    <Input id="category-description" value={categoryForm.description} onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })} placeholder="Category description" />
                   </div>
                   <div className="flex gap-2">
-                    <Button 
-                      onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
-                      className="flex-1"
-                    >
-                      {editingCategory ? 'Update Category' : 'Create Category'}
+                    <Button onClick={editingCategory ? handleUpdateCategory : handleCreateCategory} className="flex-1">
+                      {editingCategory ? "Update Category" : "Create Category"}
                     </Button>
                     {editingCategory && (
-                      <Button 
-                        variant="outline" 
-                        onClick={() => {
-                          setEditingCategory(null);
-                          setCategoryForm({ name: '', description: '' });
-                        }}
-                      >
+                      <Button variant="outline" onClick={() => { setEditingCategory(null); setCategoryForm({ name: "", description: "" }); }}>
                         Cancel
                       </Button>
                     )}
@@ -758,34 +479,19 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                 </CardContent>
               </Card>
 
-              {/* Categories List */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Categories ({categories.length})</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle>Categories ({categories.length})</CardTitle></CardHeader>
                 <CardContent>
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {categories.map((category) => (
-                      <div key={category.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    {categories.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between p-3 border rounded-lg">
                         <div className="flex-1">
-                          <p className="font-medium">{category.name}</p>
-                          <p className="text-sm text-muted-foreground">{category.description}</p>
+                          <p className="font-medium">{c.name}</p>
+                          <p className="text-sm text-muted-foreground">{c.description}</p>
                         </div>
                         <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => startEditingCategory(category)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDeleteCategory(category.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => startEditingCategory(c)}><Edit className="w-4 h-4" /></Button>
+                          <Button size="sm" variant="outline" onClick={() => handleDeleteCategory(c.id)}><Trash2 className="w-4 h-4" /></Button>
                         </div>
                       </div>
                     ))}
@@ -795,42 +501,24 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
             </div>
           </TabsContent>
 
+          {/* Tables */}
           <TabsContent value="tables">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Table Form */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Plus className="w-5 h-5" />
-                    {editingTable ? 'Edit Table' : 'Add New Table'}
-                  </CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5" />{editingTable ? "Edit Table" : "Add New Table"}</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="table-number">Table Number</Label>
-                    <Input
-                      id="table-number"
-                      type="number"
-                      value={tableForm.table_number}
-                      onChange={(e) => setTableForm({...tableForm, table_number: parseInt(e.target.value) || 0})}
+                  <div><Label htmlFor="table-number">Table Number</Label>
+                    <Input id="table-number" type="number" value={tableForm.table_number}
+                      onChange={(e) => setTableForm({ ...tableForm, table_number: parseInt(e.target.value) || 0 })}
                       placeholder="Table number"
                     />
                   </div>
                   <div className="flex gap-2">
-                    <Button 
-                      onClick={editingTable ? handleUpdateTable : handleCreateTable}
-                      className="flex-1"
-                    >
-                      {editingTable ? 'Update Table' : 'Create Table'}
+                    <Button onClick={editingTable ? handleUpdateTable : handleCreateTable} className="flex-1">
+                      {editingTable ? "Update Table" : "Create Table"}
                     </Button>
                     {editingTable && (
-                      <Button 
-                        variant="outline" 
-                        onClick={() => {
-                          setEditingTable(null);
-                          setTableForm({ table_number: 0 });
-                        }}
-                      >
+                      <Button variant="outline" onClick={() => { setEditingTable(null); setTableForm({ table_number: 0 }); }}>
                         Cancel
                       </Button>
                     )}
@@ -838,33 +526,16 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                 </CardContent>
               </Card>
 
-              {/* Tables List */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Tables ({tables.length})</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle>Tables ({tables.length})</CardTitle></CardHeader>
                 <CardContent>
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {tables.map((table) => (
-                      <div key={table.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex-1">
-                          <p className="font-medium">Table {table.table_number}</p>
-                        </div>
+                    {tables.map((t) => (
+                      <div key={t.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex-1"><p className="font-medium">Table {t.table_number}</p></div>
                         <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => startEditingTable(table)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDeleteTable(table.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => startEditingTable(t)}><Edit className="w-4 h-4" /></Button>
+                          <Button size="sm" variant="outline" onClick={() => handleDeleteTable(t.id)}><Trash2 className="w-4 h-4" /></Button>
                         </div>
                       </div>
                     ))}
