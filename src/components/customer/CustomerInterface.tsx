@@ -1,16 +1,16 @@
-import { useState, useEffect } from "react";
+// CustomerInterface.tsx
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { MenuCard } from "./MenuCard";
-import { supabase } from "@/lib/supabase";
 import { ShoppingCart, Utensils, Coffee, Cake, ArrowLeft, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import burgerImage from "@/assets/food-burger.jpg";
-import saladImage from "@/assets/food-salad.jpg";
-import dessertImage from "@/assets/food-dessert.jpg";
+import burgerImage from "@/assets/food-burger.jpg"; // fallback image
+import { listenAvailableMenuItems, MenuItem } from "@/lib/menu";
+import { createOrder } from "@/lib/orders";
 
 interface CartItem {
   id: string;
@@ -19,52 +19,12 @@ interface CartItem {
   quantity: number;
 }
 
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  image_url: string | null;
-  category: string;
-  is_vegetarian: boolean;
-  is_available: boolean;
-}
-
 interface CustomerInterfaceProps {
   onBack: () => void;
+  tableNumber?: number; // optional prop if you want dynamic table numbers
 }
 
-const MOCK_MENU = [
-  {
-    id: "1",
-    name: "Signature Gourmet Burger",
-    description: "Juicy beef patty with aged cheddar, caramelized onions, crispy bacon, and our special sauce on a brioche bun",
-    price: 18.99,
-    image: burgerImage,
-    category: "Main Course",
-    isVegetarian: false
-  },
-  {
-    id: "2", 
-    name: "Fresh Caesar Salad",
-    description: "Crisp romaine lettuce with grilled chicken, parmesan cheese, croutons, and house-made Caesar dressing",
-    price: 14.99,
-    image: saladImage,
-    category: "Salads",
-    isVegetarian: false
-  },
-  {
-    id: "3",
-    name: "Chocolate Decadence",
-    description: "Rich dark chocolate mousse with fresh berries, whipped cream, and a delicate chocolate tuile",
-    price: 12.99,
-    image: dessertImage,
-    category: "Desserts",
-    isVegetarian: true
-  }
-];
-
-export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
+export const CustomerInterface = ({ onBack, tableNumber = 12 }: CustomerInterfaceProps) => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState("All");
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -74,165 +34,46 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
   const [placing, setPlacing] = useState(false);
   const { toast } = useToast();
 
-  const categories = ["All", "Main Course", "Salads", "Desserts", "Beverages"];
-
   useEffect(() => {
-    fetchMenuItems();
+    const unsub = listenAvailableMenuItems((items) => {
+      setMenuItems(items);
+      setLoading(false);
+    });
+    return () => unsub();
   }, []);
 
-  const fetchMenuItems = async () => {
-    try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        // Use mock data when Supabase isn't configured
-        setMenuItems(MOCK_MENU.map(item => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          image_url: item.image,
-          category: item.category,
-          is_vegetarian: item.isVegetarian,
-          is_available: true
-        })));
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('menu_items')
-        .select('*')
-        .eq('is_available', true)
-        .order('category', { ascending: true });
-
-      if (error) throw error;
-      
-      // Use database items if available, otherwise fallback to mock data
-      if (data && data.length > 0) {
-        setMenuItems(data);
-      } else {
-        setMenuItems(MOCK_MENU.map(item => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          image_url: item.image,
-          category: item.category,
-          is_vegetarian: item.isVegetarian,
-          is_available: true
-        })));
-      }
-    } catch (error) {
-      console.error('Error fetching menu items:', error);
-      // Fallback to mock data
-      setMenuItems(MOCK_MENU.map(item => ({
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        price: item.price,
-        image_url: item.image,
-        category: item.category,
-        is_vegetarian: item.isVegetarian,
-        is_available: true
-      })));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const categories = useMemo(() => {
+    const set = new Set(["All"]);
+    menuItems.forEach((m) => set.add(m.category));
+    return Array.from(set);
+  }, [menuItems]);
 
   const handleQuantityChange = (id: string, quantity: number) => {
-    const item = menuItems.find(item => item.id === id);
+    const item = menuItems.find((i) => i.id === id);
     if (!item) return;
 
-    setCart(prevCart => {
-      const existingItem = prevCart.find(cartItem => cartItem.id === id);
-      
-      if (quantity === 0) {
-        return prevCart.filter(cartItem => cartItem.id !== id);
-      }
-      
-      if (existingItem) {
-        return prevCart.map(cartItem =>
-          cartItem.id === id ? { ...cartItem, quantity } : cartItem
-        );
-      }
-      
-      return [...prevCart, { id, name: item.name, price: item.price, quantity }];
+    setCart((prev) => {
+      const existing = prev.find((c) => c.id === id);
+
+      if (quantity === 0) return prev.filter((c) => c.id !== id);
+      if (existing) return prev.map((c) => (c.id === id ? { ...c, quantity } : c));
+      return [...prev, { id, name: item.name, price: item.price, quantity }];
     });
   };
 
-  const getCartQuantity = (id: string) => {
-    return cart.find(item => item.id === id)?.quantity || 0;
-  };
-
-  const getTotalPrice = () => {
-    return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
-  };
-
-  const getTotalItems = () => {
-    return cart.reduce((total, item) => total + item.quantity, 0);
-  };
+  const getCartQuantity = (id: string) => cart.find((c) => c.id === id)?.quantity || 0;
+  const getTotalPrice = () => cart.reduce((t, i) => t + i.price * i.quantity, 0);
+  const getTotalItems = () => cart.reduce((t, i) => t + i.quantity, 0);
 
   const placeOrder = async () => {
-    if (cart.length === 0) return;
-    
+    if (!cart.length) return;
     setPlacing(true);
     try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        // Mock order placement
-        toast({
-          title: "Demo Order Placed!",
-          description: `Your order for $${getTotalPrice().toFixed(2)} has been simulated. Connect Supabase for real functionality.`,
-        });
-        setCart([]);
-        setCustomerName("");
-        setShowCart(false);
-        return;
-      }
-
-      // Get a random table (in real app, this would be from QR code)
-      const { data: tables } = await supabase
-        .from('tables')
-        .select('id')
-        .eq('status', 'available')
-        .limit(1);
-
-      const tableId = tables?.[0]?.id || 'table-1';
-      
-      // Create order
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert([{
-          table_id: tableId,
-          customer_name: customerName || null,
-          total_amount: getTotalPrice(),
-          status: 'pending'
-        }])
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      // Create order items
-      const orderItems = cart.map(item => ({
-        order_id: order.id,
-        menu_item_id: item.id,
-        quantity: item.quantity,
-        price_per_item: item.price
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      // Update table status
-      await supabase
-        .from('tables')
-        .update({ status: 'occupied' })
-        .eq('id', tableId);
+      await createOrder({
+        cart,
+        tableNumber,
+        customerName,
+      });
 
       toast({
         title: "Order Placed Successfully!",
@@ -242,11 +83,11 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
       setCart([]);
       setCustomerName("");
       setShowCart(false);
-    } catch (error) {
-      console.error('Error placing order:', error);
+    } catch (e: any) {
+      console.error(e);
       toast({
         title: "Error",
-        description: "Failed to place order. Please try again.",
+        description: e?.message || "Failed to place order. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -254,15 +95,16 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
     }
   };
 
-  const filteredMenu = activeCategory === "All" 
-    ? menuItems 
-    : menuItems.filter(item => item.category === activeCategory);
+  const filteredMenu =
+    activeCategory === "All"
+      ? menuItems
+      : menuItems.filter((item) => item.category === activeCategory);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
           <p className="text-muted-foreground">Loading menu...</p>
         </div>
       </div>
@@ -281,9 +123,7 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
                   Back to Menu
                 </Button>
                 <div>
-                  <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-                    Your Cart
-                  </h1>
+                  <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">Your Cart</h1>
                   <p className="text-muted-foreground text-sm">Review your order</p>
                 </div>
               </div>
@@ -332,24 +172,16 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
                     </div>
                   ))}
                 </div>
-                
+
                 <Separator className="my-4" />
-                
+
                 <div className="flex justify-between items-center mb-6">
                   <span className="text-xl font-bold">Total:</span>
-                  <span className="text-xl font-bold text-primary">
-                    ${getTotalPrice().toFixed(2)}
-                  </span>
+                  <span className="text-xl font-bold text-primary">${getTotalPrice().toFixed(2)}</span>
                 </div>
-                
-                <Button 
-                  variant="hero" 
-                  className="w-full" 
-                  size="lg"
-                  onClick={placeOrder}
-                  disabled={placing}
-                >
-                  {placing ? 'Placing Order...' : 'Place Order'}
+
+                <Button variant="hero" className="w-full" size="lg" onClick={placeOrder} disabled={placing}>
+                  {placing ? "Placing Order..." : "Place Order"}
                 </Button>
               </CardContent>
             </Card>
@@ -361,7 +193,6 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
-      {/* Header */}
       <header className="bg-card border-b shadow-soft sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -371,13 +202,11 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
                 Back
               </Button>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-                  SmartServe
-                </h1>
-                <p className="text-muted-foreground text-sm">Table #12</p>
+                <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">SmartServe</h1>
+                <p className="text-muted-foreground text-sm">Table #{tableNumber}</p>
               </div>
             </div>
-            
+
             {getTotalItems() > 0 && (
               <Button variant="hero" className="relative" onClick={() => setShowCart(true)}>
                 <ShoppingCart className="w-4 h-4 mr-2" />
@@ -392,7 +221,6 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
       </header>
 
       <div className="container mx-auto px-4 py-6">
-        {/* Category Filters */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {categories.map((category) => (
             <Button
@@ -409,7 +237,6 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
           ))}
         </div>
 
-        {/* Menu Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
           {filteredMenu.map((item) => (
             <MenuCard
@@ -418,16 +245,15 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
               name={item.name}
               description={item.description}
               price={item.price}
-              image={item.image_url || burgerImage}
+              image={item.imageUrl || burgerImage}
               category={item.category}
-              isVegetarian={item.is_vegetarian}
+              isVegetarian={item.isVegetarian}
               quantity={getCartQuantity(item.id)}
               onQuantityChange={handleQuantityChange}
             />
           ))}
         </div>
 
-        {/* Cart Summary */}
         {cart.length > 0 && (
           <Card className="sticky bottom-4 shadow-elegant bg-card/95 backdrop-blur-sm">
             <CardHeader className="pb-2">
@@ -440,31 +266,20 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
               <div className="space-y-2 mb-4">
                 {cart.map((item) => (
                   <div key={item.id} className="flex justify-between items-center">
-                    <span className="text-sm">
-                      {item.name} x{item.quantity}
-                    </span>
-                    <span className="font-medium">
-                      ${(item.price * item.quantity).toFixed(2)}
-                    </span>
+                    <span className="text-sm">{item.name} x{item.quantity}</span>
+                    <span className="font-medium">${(item.price * item.quantity).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
-              
+
               <Separator className="my-3" />
-              
+
               <div className="flex justify-between items-center mb-4">
                 <span className="text-lg font-bold">Total:</span>
-                <span className="text-lg font-bold text-primary">
-                  ${getTotalPrice().toFixed(2)}
-                </span>
+                <span className="text-lg font-bold text-primary">${getTotalPrice().toFixed(2)}</span>
               </div>
-              
-              <Button 
-                variant="hero" 
-                className="w-full" 
-                size="lg"
-                onClick={() => setShowCart(true)}
-              >
+
+              <Button variant="hero" className="w-full" size="lg" onClick={() => setShowCart(true)}>
                 Review & Place Order
               </Button>
             </CardContent>
