@@ -3,8 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { supabase, insertMenuItems, insertTables } from "@/lib/supabase";
-import { ArrowLeft, BarChart3, Users, DollarSign, TrendingUp, Clock, ChefHat } from "lucide-react";
+import { ArrowLeft, BarChart3, Users, DollarSign, TrendingUp, Clock, ChefHat, Plus, Edit, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface OrderAnalytics {
@@ -21,6 +23,28 @@ interface OrderAnalytics {
   }>;
 }
 
+interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  image_url: string;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  description: string;
+}
+
+interface Table {
+  id: string;
+  table_number: number;
+  capacity: number;
+  status: 'available' | 'occupied' | 'reserved';
+}
+
 interface AdminDashboardProps {
   onBack: () => void;
 }
@@ -31,8 +55,38 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
   const [initializing, setInitializing] = useState(false);
   const { toast } = useToast();
 
+  // New state for CRUD operations
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [tables, setTables] = useState<Table[]>([]);
+
+  // Form states
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [editingTable, setEditingTable] = useState<Table | null>(null);
+
+  const [itemForm, setItemForm] = useState({
+    name: '',
+    description: '',
+    price: 0,
+    category: '',
+    image_url: ''
+  });
+
+  const [categoryForm, setCategoryForm] = useState({
+    name: '',
+    description: ''
+  });
+
+  const [tableForm, setTableForm] = useState({
+    table_number: 0,
+    capacity: 0,
+    status: 'available' as const
+  });
+
   useEffect(() => {
     fetchOrders();
+    initializeMockData();
     
     // Subscribe to real-time updates only if Supabase is configured
     if (supabase) {
@@ -48,6 +102,26 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
       };
     }
   }, []);
+
+  const initializeMockData = () => {
+    // Initialize with some mock data
+    setCategories([
+      { id: '1', name: 'Appetizers', description: 'Start your meal right' },
+      { id: '2', name: 'Main Courses', description: 'Hearty main dishes' },
+      { id: '3', name: 'Desserts', description: 'Sweet endings' }
+    ]);
+
+    setMenuItems([
+      { id: '1', name: 'Caesar Salad', description: 'Fresh romaine lettuce with parmesan', price: 12.99, category: 'Appetizers', image_url: '/api/placeholder/300/200' },
+      { id: '2', name: 'Grilled Salmon', description: 'Atlantic salmon with herbs', price: 24.99, category: 'Main Courses', image_url: '/api/placeholder/300/200' }
+    ]);
+
+    setTables([
+      { id: '1', table_number: 1, capacity: 4, status: 'available' },
+      { id: '2', table_number: 2, capacity: 2, status: 'occupied' },
+      { id: '3', table_number: 3, capacity: 6, status: 'reserved' }
+    ]);
+  };
 
   const fetchOrders = async () => {
     try {
@@ -118,6 +192,112 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
     }
   };
 
+  // CRUD operations for Items
+  const handleCreateItem = () => {
+    const newItem: MenuItem = {
+      id: Date.now().toString(),
+      ...itemForm
+    };
+    setMenuItems([...menuItems, newItem]);
+    setItemForm({ name: '', description: '', price: 0, category: '', image_url: '' });
+    toast({ title: "Success", description: "Item created successfully" });
+  };
+
+  const handleUpdateItem = () => {
+    if (!editingItem) return;
+    setMenuItems(menuItems.map(item => 
+      item.id === editingItem.id ? { ...editingItem, ...itemForm } : item
+    ));
+    setEditingItem(null);
+    setItemForm({ name: '', description: '', price: 0, category: '', image_url: '' });
+    toast({ title: "Success", description: "Item updated successfully" });
+  };
+
+  const handleDeleteItem = (id: string) => {
+    setMenuItems(menuItems.filter(item => item.id !== id));
+    toast({ title: "Success", description: "Item deleted successfully" });
+  };
+
+  const startEditingItem = (item: MenuItem) => {
+    setEditingItem(item);
+    setItemForm({
+      name: item.name,
+      description: item.description,
+      price: item.price,
+      category: item.category,
+      image_url: item.image_url
+    });
+  };
+
+  // CRUD operations for Categories
+  const handleCreateCategory = () => {
+    const newCategory: Category = {
+      id: Date.now().toString(),
+      ...categoryForm
+    };
+    setCategories([...categories, newCategory]);
+    setCategoryForm({ name: '', description: '' });
+    toast({ title: "Success", description: "Category created successfully" });
+  };
+
+  const handleUpdateCategory = () => {
+    if (!editingCategory) return;
+    setCategories(categories.map(category => 
+      category.id === editingCategory.id ? { ...editingCategory, ...categoryForm } : category
+    ));
+    setEditingCategory(null);
+    setCategoryForm({ name: '', description: '' });
+    toast({ title: "Success", description: "Category updated successfully" });
+  };
+
+  const handleDeleteCategory = (id: string) => {
+    setCategories(categories.filter(category => category.id !== id));
+    toast({ title: "Success", description: "Category deleted successfully" });
+  };
+
+  const startEditingCategory = (category: Category) => {
+    setEditingCategory(category);
+    setCategoryForm({
+      name: category.name,
+      description: category.description
+    });
+  };
+
+  // CRUD operations for Tables
+  const handleCreateTable = () => {
+    const newTable: Table = {
+      id: Date.now().toString(),
+      ...tableForm
+    };
+    setTables([...tables, newTable]);
+    setTableForm({ table_number: 0, capacity: 0, status: 'available' });
+    toast({ title: "Success", description: "Table created successfully" });
+  };
+
+  const handleUpdateTable = () => {
+    if (!editingTable) return;
+    setTables(tables.map(table => 
+      table.id === editingTable.id ? { ...editingTable, ...tableForm } : table
+    ));
+    setEditingTable(null);
+    setTableForm({ table_number: 0, capacity: 0, status: 'available' });
+    toast({ title: "Success", description: "Table updated successfully" });
+  };
+
+  const handleDeleteTable = (id: string) => {
+    setTables(tables.filter(table => table.id !== id));
+    toast({ title: "Success", description: "Table deleted successfully" });
+  };
+
+  const startEditingTable = (table: Table) => {
+    setEditingTable(table);
+    setTableForm({
+      table_number: table.table_number,
+      capacity: table.capacity,
+      status: table.status
+    });
+  };
+
   const getRecentOrders = () => {
     return orders.slice(0, 10);
   };
@@ -169,6 +349,15 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
       case 'ready': return 'bg-success text-success-foreground';
       case 'completed': return 'bg-success text-success-foreground';
       case 'cancelled': return 'bg-destructive text-destructive-foreground';
+      default: return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const getTableStatusColor = (status: string) => {
+    switch (status) {
+      case 'available': return 'bg-success text-success-foreground';
+      case 'occupied': return 'bg-warning text-warning-foreground';
+      case 'reserved': return 'bg-primary text-primary-foreground';
       default: return 'bg-muted text-muted-foreground';
     }
   };
@@ -273,10 +462,13 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
         </div>
 
         <Tabs defaultValue="orders" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="orders">Recent Orders</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="status">Order Status</TabsTrigger>
+            <TabsTrigger value="items">Items</TabsTrigger>
+            <TabsTrigger value="categories">Categories</TabsTrigger>
+            <TabsTrigger value="tables">Tables</TabsTrigger>
           </TabsList>
 
           <TabsContent value="orders">
@@ -375,6 +567,318 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="items">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Item Form */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Plus className="w-5 h-5" />
+                    {editingItem ? 'Edit Item' : 'Add New Item'}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label htmlFor="item-name">Name</Label>
+                    <Input
+                      id="item-name"
+                      value={itemForm.name}
+                      onChange={(e) => setItemForm({...itemForm, name: e.target.value})}
+                      placeholder="Item name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="item-description">Description</Label>
+                    <Input
+                      id="item-description"
+                      value={itemForm.description}
+                      onChange={(e) => setItemForm({...itemForm, description: e.target.value})}
+                      placeholder="Item description"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="item-price">Price</Label>
+                    <Input
+                      id="item-price"
+                      type="number"
+                      step="0.01"
+                      value={itemForm.price}
+                      onChange={(e) => setItemForm({...itemForm, price: parseFloat(e.target.value) || 0})}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="item-category">Category</Label>
+                    <Input
+                      id="item-category"
+                      value={itemForm.category}
+                      onChange={(e) => setItemForm({...itemForm, category: e.target.value})}
+                      placeholder="Category"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="item-image">Image URL</Label>
+                    <Input
+                      id="item-image"
+                      value={itemForm.image_url}
+                      onChange={(e) => setItemForm({...itemForm, image_url: e.target.value})}
+                      placeholder="Image URL"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={editingItem ? handleUpdateItem : handleCreateItem}
+                      className="flex-1"
+                    >
+                      {editingItem ? 'Update Item' : 'Create Item'}
+                    </Button>
+                    {editingItem && (
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setEditingItem(null);
+                          setItemForm({ name: '', description: '', price: 0, category: '', image_url: '' });
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Items List */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Menu Items ({menuItems.length})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {menuItems.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex-1">
+                          <p className="font-medium">{item.name}</p>
+                          <p className="text-sm text-muted-foreground">{item.description}</p>
+                          <p className="text-sm font-medium text-primary">${item.price.toFixed(2)} • {item.category}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => startEditingItem(item)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteItem(item.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="categories">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Category Form */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Plus className="w-5 h-5" />
+                    {editingCategory ? 'Edit Category' : 'Add New Category'}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label htmlFor="category-name">Name</Label>
+                    <Input
+                      id="category-name"
+                      value={categoryForm.name}
+                      onChange={(e) => setCategoryForm({...categoryForm, name: e.target.value})}
+                      placeholder="Category name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="category-description">Description</Label>
+                    <Input
+                      id="category-description"
+                      value={categoryForm.description}
+                      onChange={(e) => setCategoryForm({...categoryForm, description: e.target.value})}
+                      placeholder="Category description"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
+                      className="flex-1"
+                    >
+                      {editingCategory ? 'Update Category' : 'Create Category'}
+                    </Button>
+                    {editingCategory && (
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setEditingCategory(null);
+                          setCategoryForm({ name: '', description: '' });
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Categories List */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Categories ({categories.length})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {categories.map((category) => (
+                      <div key={category.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex-1">
+                          <p className="font-medium">{category.name}</p>
+                          <p className="text-sm text-muted-foreground">{category.description}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => startEditingCategory(category)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteCategory(category.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="tables">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Table Form */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Plus className="w-5 h-5" />
+                    {editingTable ? 'Edit Table' : 'Add New Table'}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label htmlFor="table-number">Table Number</Label>
+                    <Input
+                      id="table-number"
+                      type="number"
+                      value={tableForm.table_number}
+                      onChange={(e) => setTableForm({...tableForm, table_number: parseInt(e.target.value) || 0})}
+                      placeholder="Table number"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="table-capacity">Capacity</Label>
+                    <Input
+                      id="table-capacity"
+                      type="number"
+                      value={tableForm.capacity}
+                      onChange={(e) => setTableForm({...tableForm, capacity: parseInt(e.target.value) || 0})}
+                      placeholder="Number of seats"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="table-status">Status</Label>
+                    <select
+                      id="table-status"
+                      value={tableForm.status}
+                      onChange={(e) => setTableForm({...tableForm, status: e.target.value as 'available' | 'occupied' | 'reserved'})}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <option value="available">Available</option>
+                      <option value="occupied">Occupied</option>
+                      <option value="reserved">Reserved</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={editingTable ? handleUpdateTable : handleCreateTable}
+                      className="flex-1"
+                    >
+                      {editingTable ? 'Update Table' : 'Create Table'}
+                    </Button>
+                    {editingTable && (
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setEditingTable(null);
+                          setTableForm({ table_number: 0, capacity: 0, status: 'available' });
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tables List */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Tables ({tables.length})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {tables.map((table) => (
+                      <div key={table.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex-1">
+                          <p className="font-medium">Table {table.table_number}</p>
+                          <p className="text-sm text-muted-foreground">Capacity: {table.capacity} people</p>
+                          <Badge className={`mt-1 ${getTableStatusColor(table.status)}`}>
+                            {table.status}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => startEditingTable(table)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteTable(table.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
         </Tabs>
