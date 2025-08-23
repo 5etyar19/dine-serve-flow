@@ -1,9 +1,9 @@
+// KitchenInterface.tsx (Supabase removed)
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { supabase } from "@/lib/supabase";
 import { CheckCircle, X, Clock, ChefHat, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,7 +12,7 @@ interface Order {
   table_id: string;
   customer_name: string | null;
   total_amount: number;
-  status: 'pending' | 'accepted' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  status: "pending" | "accepted" | "preparing" | "ready" | "completed" | "cancelled";
   created_at: string;
   updated_at: string;
   tables: { table_number: number };
@@ -27,113 +27,104 @@ interface KitchenInterfaceProps {
   onBack: () => void;
 }
 
+/* ---------------- Demo data + local API (replaces Supabase) --------------- */
+let demoOrders: Order[] = [
+  {
+    id: "ord-1",
+    table_id: "t-3",
+    customer_name: "Guest",
+    total_amount: 31.98,
+    status: "pending",
+    created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+    updated_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+    tables: { table_number: 3 },
+    order_items: [
+      { quantity: 1, price_per_item: 18.99, menu_items: { name: "Signature Gourmet Burger" } },
+      { quantity: 1, price_per_item: 12.99, menu_items: { name: "Chocolate Decadence" } },
+    ],
+  },
+  {
+    id: "ord-2",
+    table_id: "t-1",
+    customer_name: null,
+    total_amount: 14.99,
+    status: "accepted",
+    created_at: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
+    updated_at: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
+    tables: { table_number: 1 },
+    order_items: [{ quantity: 1, price_per_item: 14.99, menu_items: { name: "Fresh Caesar Salad" } }],
+  },
+];
+
+const dataApi = {
+  async getActiveKitchenOrders(): Promise<Order[]> {
+    // return only kitchen-relevant statuses, oldest first
+    return [...demoOrders]
+      .filter((o) => ["pending", "accepted", "preparing", "ready"].includes(o.status))
+      .sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at));
+  },
+  async updateOrderStatus(orderId: string, newStatus: Order["status"]): Promise<void> {
+    demoOrders = demoOrders.map((o) =>
+      o.id === orderId ? { ...o, status: newStatus, updated_at: new Date().toISOString() } : o
+    );
+  },
+  subscribeOrders(_cb: () => void): () => void {
+    // no realtime in demo mode
+    return () => {};
+  },
+};
+/* ------------------------------------------------------------------------- */
+
 export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchOrders();
-    
-    // Subscribe to real-time updates only if Supabase is configured
-    if (supabase) {
-      const ordersSubscription = supabase
-        .channel('kitchen-orders-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-          fetchOrders();
-        })
-        .subscribe();
-
-      return () => {
-        ordersSubscription.unsubscribe();
-      };
-    }
-  }, []);
-
   const fetchOrders = async () => {
     try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        // Use mock data when Supabase isn't configured
-        setOrders([]);
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          tables (table_number),
-          order_items (
-            quantity,
-            price_per_item,
-            menu_items (name)
-          )
-        `)
-        .in('status', ['pending', 'accepted', 'preparing', 'ready'])
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
+      const data = await dataApi.getActiveKitchenOrders();
       setOrders(data || []);
     } catch (error) {
-      console.error('Error fetching orders:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch orders",
-        variant: "destructive",
-      });
+      console.error("Error fetching orders:", error);
+      toast({ title: "Error", description: "Failed to fetch orders", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  const updateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
+  useEffect(() => {
+    fetchOrders();
+    const unsub = dataApi.subscribeOrders(fetchOrders); // no-op in demo
+    return () => unsub();
+  }, []); // eslint-disable-line
+
+  const updateOrderStatus = async (orderId: string, newStatus: Order["status"]) => {
     try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        toast({
-          title: "Demo Mode",
-          description: "Connect Supabase to enable real order management",
-        });
-        return;
-      }
-
-      const { error } = await supabase
-        .from('orders')
-        .update({ 
-          status: newStatus,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Order Updated",
-        description: `Order status changed to ${newStatus}`,
-      });
-
+      await dataApi.updateOrderStatus(orderId, newStatus);
+      toast({ title: "Order Updated (Demo)", description: `Order status changed to ${newStatus}` });
       fetchOrders();
     } catch (error) {
-      console.error('Error updating order:', error);
-      toast({
-        title: "Error",
-        description: "Failed to update order status",
-        variant: "destructive",
-      });
+      console.error("Error updating order:", error);
+      toast({ title: "Error", description: "Failed to update order status", variant: "destructive" });
     }
   };
 
-  const getStatusColor = (status: Order['status']) => {
+  const getStatusColor = (status: Order["status"]) => {
     switch (status) {
-      case 'pending': return 'bg-warning text-warning-foreground';
-      case 'accepted': return 'bg-primary text-primary-foreground';
-      case 'preparing': return 'bg-secondary text-secondary-foreground';
-      case 'ready': return 'bg-success text-success-foreground';
-      case 'completed': return 'bg-success text-success-foreground';
-      case 'cancelled': return 'bg-destructive text-destructive-foreground';
-      default: return 'bg-muted text-muted-foreground';
+      case "pending":
+        return "bg-warning text-warning-foreground";
+      case "accepted":
+        return "bg-primary text-primary-foreground";
+      case "preparing":
+        return "bg-secondary text-secondary-foreground";
+      case "ready":
+        return "bg-success text-success-foreground";
+      case "completed":
+        return "bg-success text-success-foreground";
+      case "cancelled":
+        return "bg-destructive text-destructive-foreground";
+      default:
+        return "bg-muted text-muted-foreground";
     }
   };
 
@@ -185,15 +176,13 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h3 className="text-lg font-semibold">
-                        Table {order.tables.table_number} - {order.customer_name || 'Guest'}
+                        Table {order.tables.table_number} - {order.customer_name || "Guest"}
                       </h3>
                       <p className="text-sm text-muted-foreground">
                         {new Date(order.created_at).toLocaleTimeString()}
                       </p>
                     </div>
-                    <Badge className={getStatusColor(order.status)}>
-                      {order.status}
-                    </Badge>
+                    <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
                   </div>
 
                   <div className="space-y-2 mb-4">
@@ -213,54 +202,46 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
 
                   <div className="flex justify-between items-center mb-4">
                     <span className="font-semibold">Total:</span>
-                    <span className="font-bold text-primary">
-                      ${order.total_amount.toFixed(2)}
-                    </span>
+                    <span className="font-bold text-primary">${order.total_amount.toFixed(2)}</span>
                   </div>
 
                   <div className="flex gap-2">
-                    {order.status === 'pending' && (
+                    {order.status === "pending" && (
                       <>
-                        <Button 
-                          onClick={() => updateOrderStatus(order.id, 'accepted')}
-                          className="flex-1"
-                        >
+                        <Button className="flex-1" onClick={() => updateOrderStatus(order.id, "accepted")}>
                           <CheckCircle className="w-4 h-4 mr-2" />
                           Accept Order
                         </Button>
-                        <Button 
+                        <Button
                           variant="destructive"
-                          onClick={() => updateOrderStatus(order.id, 'cancelled')}
                           className="flex-1"
+                          onClick={() => updateOrderStatus(order.id, "cancelled")}
                         >
                           <X className="w-4 h-4 mr-2" />
                           Reject
                         </Button>
                       </>
                     )}
-                    
-                    {order.status === 'accepted' && (
-                      <Button 
-                        onClick={() => updateOrderStatus(order.id, 'preparing')}
-                        className="w-full"
-                      >
+
+                    {order.status === "accepted" && (
+                      <Button className="w-full" onClick={() => updateOrderStatus(order.id, "preparing")}>
                         <Clock className="w-4 h-4 mr-2" />
                         Start Preparing
                       </Button>
                     )}
-                    
-                    {order.status === 'preparing' && (
-                      <Button 
+
+                    {order.status === "preparing" && (
+                      <Button
                         variant="success"
-                        onClick={() => updateOrderStatus(order.id, 'ready')}
                         className="w-full"
+                        onClick={() => updateOrderStatus(order.id, "ready")}
                       >
                         <CheckCircle className="w-4 h-4 mr-2" />
                         Mark as Ready
                       </Button>
                     )}
 
-                    {order.status === 'ready' && (
+                    {order.status === "ready" && (
                       <div className="w-full text-center p-2 bg-success/10 rounded-lg">
                         <span className="text-success font-medium">Order Ready for Pickup</span>
                       </div>
@@ -275,7 +256,9 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
             <ChefHat className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold mb-2">No Active Orders</h3>
             <p className="text-muted-foreground">
-              {orders.length === 0 ? 'No orders yet. Waiting for customers...' : 'All orders are completed. Great work, chef!'}
+              {orders.length === 0
+                ? "No orders yet. Waiting for customers..."
+                : "All orders are completed. Great work, chef!"}
             </p>
           </div>
         )}

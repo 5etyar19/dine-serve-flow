@@ -1,18 +1,19 @@
+// AdminDashboard.tsx  (Supabase removed)
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase, insertMenuItems, insertTables } from "@/lib/supabase";
-import { ArrowLeft, BarChart3, Users, DollarSign, TrendingUp, Clock, ChefHat } from "lucide-react";
+import { ArrowLeft, BarChart3, DollarSign, TrendingUp, Clock, ChefHat } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+// --- Types (unchanged) ---
 interface OrderAnalytics {
   id: string;
   table_id: string;
   customer_name: string | null;
   total_amount: number;
-  status: string;
+  status: "pending" | "accepted" | "preparing" | "ready" | "completed" | "cancelled" | string;
   created_at: string;
   tables: { table_number: number };
   order_items: Array<{
@@ -25,6 +26,23 @@ interface AdminDashboardProps {
   onBack: () => void;
 }
 
+// --- Minimal local "data API" stubs (replaces Supabase completely) ---
+// Later, you can wire these to Firebase without touching the UI below.
+const dataApi = {
+  async getOrders(): Promise<OrderAnalytics[]> {
+    // Return empty array in demo mode (no backend)
+    return [];
+  },
+  // Realtime no-op; returns an unsubscribe function
+  subscribeOrders(_onChange: () => void): () => void {
+    // No realtime in demo mode
+    return () => {};
+  },
+  async initializeData(): Promise<void> {
+    // No-op in demo mode
+  },
+};
+
 export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
   const [orders, setOrders] = useState<OrderAnalytics[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,82 +50,42 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchOrders();
-    
-    // Subscribe to real-time updates only if Supabase is configured
-    if (supabase) {
-      const ordersSubscription = supabase
-        .channel('admin-orders-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-          fetchOrders();
-        })
-        .subscribe();
-
-      return () => {
-        ordersSubscription.unsubscribe();
-      };
-    }
-  }, []);
-
-  const fetchOrders = async () => {
-    try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        // Use mock data when Supabase isn't configured
-        setOrders([]);
+    // Initial fetch
+    (async () => {
+      try {
+        const data = await dataApi.getOrders();
+        setOrders(data || []);
+      } catch (err) {
+        console.error("Error fetching orders:", err);
+        toast({
+          title: "Error",
+          description: "Failed to fetch orders",
+          variant: "destructive",
+        });
+      } finally {
         setLoading(false);
-        return;
       }
+    })();
 
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          tables (table_number),
-          order_items (
-            quantity,
-            menu_items (name)
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+    // Realtime (no-op in demo mode)
+    const unsubscribe = dataApi.subscribeOrders(async () => {
+      const data = await dataApi.getOrders();
       setOrders(data || []);
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch orders",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+    });
+
+    return () => unsubscribe();
+  }, [toast]);
 
   const initializeData = async () => {
     setInitializing(true);
     try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        toast({
-          title: "Demo Mode",
-          description: "Connect Supabase to initialize database with sample data",
-        });
-        return;
-      }
-
-      await Promise.all([
-        insertTables(),
-        insertMenuItems()
-      ]);
-      
+      await dataApi.initializeData();
       toast({
-        title: "Success",
-        description: "Database initialized with sample data",
+        title: "Demo Mode",
+        description: "Sample data initialization is a no-op (backend removed).",
       });
     } catch (error) {
-      console.error('Error initializing data:', error);
+      console.error("Error initializing data:", error);
       toast({
         title: "Error",
         description: "Failed to initialize data",
@@ -118,30 +96,23 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
     }
   };
 
-  const getRecentOrders = () => {
-    return orders.slice(0, 10);
-  };
+  const getRecentOrders = () => orders.slice(0, 10);
 
   const getMostDemandedItems = () => {
-    const itemCounts: { [key: string]: number } = {};
-    
-    orders.forEach(order => {
-      order.order_items.forEach(item => {
+    const itemCounts: Record<string, number> = {};
+    orders.forEach((order) => {
+      order.order_items.forEach((item) => {
         const itemName = item.menu_items.name;
         itemCounts[itemName] = (itemCounts[itemName] || 0) + item.quantity;
       });
     });
-
     return Object.entries(itemCounts)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 5);
   };
 
-  const getTotalRevenue = () => {
-    return orders
-      .filter(order => order.status === 'completed')
-      .reduce((sum, order) => sum + order.total_amount, 0);
-  };
+  const getTotalRevenue = () =>
+    orders.filter((o) => o.status === "completed").reduce((sum, o) => sum + o.total_amount, 0);
 
   const getOrdersByStatus = () => {
     const statusCounts = {
@@ -150,26 +121,31 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
       preparing: 0,
       ready: 0,
       completed: 0,
-      cancelled: 0
+      cancelled: 0,
     };
-
-    orders.forEach(order => {
-      statusCounts[order.status as keyof typeof statusCounts] = 
-        (statusCounts[order.status as keyof typeof statusCounts] || 0) + 1;
+    orders.forEach((order) => {
+      const k = order.status as keyof typeof statusCounts;
+      if (k in statusCounts) statusCounts[k] = (statusCounts[k] || 0) + 1;
     });
-
     return statusCounts;
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-warning text-warning-foreground';
-      case 'accepted': return 'bg-primary text-primary-foreground';
-      case 'preparing': return 'bg-secondary text-secondary-foreground';
-      case 'ready': return 'bg-success text-success-foreground';
-      case 'completed': return 'bg-success text-success-foreground';
-      case 'cancelled': return 'bg-destructive text-destructive-foreground';
-      default: return 'bg-muted text-muted-foreground';
+      case "pending":
+        return "bg-warning text-warning-foreground";
+      case "accepted":
+        return "bg-primary text-primary-foreground";
+      case "preparing":
+        return "bg-secondary text-secondary-foreground";
+      case "ready":
+        return "bg-success text-success-foreground";
+      case "completed":
+        return "bg-success text-success-foreground";
+      case "cancelled":
+        return "bg-destructive text-destructive-foreground";
+      default:
+        return "bg-muted text-muted-foreground";
     }
   };
 
@@ -207,12 +183,8 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                 <p className="text-muted-foreground text-sm">Restaurant Management & Analytics</p>
               </div>
             </div>
-            <Button 
-              onClick={initializeData}
-              disabled={initializing}
-              variant="outline"
-            >
-              {initializing ? 'Initializing...' : 'Initialize Data'}
+            <Button onClick={initializeData} disabled={initializing} variant="outline">
+              {initializing ? "Initializing..." : "Initialize Data"}
             </Button>
           </div>
         </div>
@@ -251,7 +223,10 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
                 <div>
                   <p className="text-sm text-muted-foreground">Active Orders</p>
                   <p className="text-2xl font-bold">
-                    {ordersByStatus.pending + ordersByStatus.accepted + ordersByStatus.preparing + ordersByStatus.ready}
+                    {ordersByStatus.pending +
+                      ordersByStatus.accepted +
+                      ordersByStatus.preparing +
+                      ordersByStatus.ready}
                   </p>
                 </div>
                 <ChefHat className="w-8 h-8 text-warning" />
@@ -289,36 +264,39 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {recentOrders.length > 0 ? recentOrders.map((order) => (
-                    <Card key={order.id} className="border-l-4 border-l-primary">
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start mb-3">
-                          <div>
-                            <p className="font-semibold">
-                              Table {order.tables.table_number} - {order.customer_name || 'Guest'}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(order.created_at).toLocaleString()}
-                            </p>
+                  {recentOrders.length > 0 ? (
+                    recentOrders.map((order) => (
+                      <Card key={order.id} className="border-l-4 border-l-primary">
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <p className="font-semibold">
+                                Table {order.tables.table_number} - {order.customer_name || "Guest"}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(order.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <Badge className={getStatusColor(order.status)}>
+                                {order.status}
+                              </Badge>
+                              <p className="text-lg font-bold text-primary mt-1">
+                                ${order.total_amount.toFixed(2)}
+                              </p>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <Badge className={getStatusColor(order.status)}>
-                              {order.status}
-                            </Badge>
-                            <p className="text-lg font-bold text-primary mt-1">
-                              ${order.total_amount.toFixed(2)}
-                            </p>
-                          </div>
-                        </div>
 
-                        <div className="text-sm text-muted-foreground">
-                          Items: {order.order_items.map(item => 
-                            `${item.menu_items.name} (${item.quantity})`
-                          ).join(', ')}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )) : (
+                          <div className="text-sm text-muted-foreground">
+                            Items:{" "}
+                            {order.order_items
+                              .map((item) => `${item.menu_items.name} (${item.quantity})`)
+                              .join(", ")}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  ) : (
                     <div className="text-center py-8">
                       <BarChart3 className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                       <p className="text-muted-foreground">No orders yet. Initialize data to get started.</p>
@@ -339,19 +317,19 @@ export const AdminDashboard = ({ onBack }: AdminDashboardProps) => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {mostDemandedItems.length > 0 ? mostDemandedItems.map(([itemName, count], index) => (
-                    <div key={itemName} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                          <span className="text-sm font-bold text-primary">#{index + 1}</span>
+                  {mostDemandedItems.length > 0 ? (
+                    mostDemandedItems.map(([itemName, count], index) => (
+                      <div key={itemName} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                            <span className="text-sm font-bold text-primary">#{index + 1}</span>
+                          </div>
+                          <span className="font-medium">{itemName}</span>
                         </div>
-                        <span className="font-medium">{itemName}</span>
+                        <Badge variant="outline">{count} orders</Badge>
                       </div>
-                      <Badge variant="outline">
-                        {count} orders
-                      </Badge>
-                    </div>
-                  )) : (
+                    ))
+                  ) : (
                     <div className="text-center py-8">
                       <TrendingUp className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                       <p className="text-muted-foreground">No analytics data available yet.</p>

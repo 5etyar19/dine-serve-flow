@@ -1,16 +1,17 @@
+// CashierInterface.tsx (Supabase removed)
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { supabase } from "@/lib/supabase";
 import { ArrowLeft, CreditCard, Receipt, Users, DollarSign, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+// --- Types ---
 interface Table {
   id: string;
   table_number: number;
-  status: 'available' | 'occupied' | 'reserved';
+  status: "available" | "occupied" | "reserved";
 }
 
 interface Order {
@@ -32,6 +33,60 @@ interface CashierInterfaceProps {
   onBack: () => void;
 }
 
+// --- Local demo data & API (replaces Supabase entirely) ---
+const demoTables: Table[] = [
+  { id: "t-1", table_number: 1, status: "available" },
+  { id: "t-2", table_number: 2, status: "available" },
+  { id: "t-3", table_number: 3, status: "occupied" },
+  { id: "t-4", table_number: 4, status: "available" },
+  { id: "t-5", table_number: 5, status: "reserved" },
+];
+
+let demoOrders: Order[] = [
+  {
+    id: "o-1",
+    table_id: "t-3",
+    customer_name: "Guest",
+    status: "ready",
+    total_amount: 31.98,
+    created_at: new Date().toISOString(),
+    tables: { table_number: 3 },
+    order_items: [
+      { quantity: 1, price_per_item: 18.99, menu_items: { name: "Signature Gourmet Burger" } },
+      { quantity: 1, price_per_item: 12.99, menu_items: { name: "Chocolate Decadence" } },
+    ],
+  },
+];
+
+const dataApi = {
+  async getTables(): Promise<Table[]> {
+    return [...demoTables];
+  },
+  async getActiveOrders(): Promise<Order[]> {
+    // mimic active statuses
+    return demoOrders.filter((o) => ["pending", "accepted", "preparing", "ready"].includes(o.status));
+  },
+  async completeOrder(orderId: string): Promise<void> {
+    demoOrders = demoOrders.map((o) => (o.id === orderId ? { ...o, status: "completed" } : o));
+    // auto-free table if no active orders remain
+    const affected = demoOrders.find((o) => o.id === orderId);
+    if (affected) {
+      const stillActive = demoOrders.some(
+        (o) => o.table_id === affected.table_id && ["pending", "accepted", "preparing", "ready"].includes(o.status)
+      );
+      if (!stillActive) {
+        demoOrders = demoOrders.map((o) =>
+          o.id === orderId ? { ...o, status: "completed" } : o
+        );
+      }
+    }
+  },
+  // no-op realtime
+  subscribeOrders(_cb: () => void): () => void {
+    return () => {};
+  },
+};
+
 export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
   const [tables, setTables] = useState<Table[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -40,134 +95,57 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchTablesAndOrders();
-    
-    // Subscribe to real-time updates only if Supabase is configured
-    if (supabase) {
-      const ordersSubscription = supabase
-        .channel('orders-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-          fetchTablesAndOrders();
-        })
-        .subscribe();
+    const load = async () => {
+      try {
+        const [t, o] = await Promise.all([dataApi.getTables(), dataApi.getActiveOrders()]);
+        setTables(t);
+        setOrders(o);
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        toast({ title: "Error", description: "Failed to fetch data", variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
 
-      return () => {
-        ordersSubscription.unsubscribe();
-      };
-    }
-  }, []);
+    const unsub = dataApi.subscribeOrders(load); // no-op in demo
+    return () => unsub();
+  }, [toast]);
 
   const fetchTablesAndOrders = async () => {
-    try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        // Use mock data when Supabase isn't configured
-        setTables([]);
-        setOrders([]);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch tables
-      const { data: tablesData, error: tablesError } = await supabase
-        .from('tables')
-        .select('*')
-        .order('table_number');
-
-      if (tablesError) throw tablesError;
-
-      // Fetch orders with table and item details
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          tables (table_number),
-          order_items (
-            quantity,
-            price_per_item,
-            menu_items (name)
-          )
-        `)
-        .in('status', ['pending', 'accepted', 'preparing', 'ready'])
-        .order('created_at', { ascending: false });
-
-      if (ordersError) throw ordersError;
-
-      setTables(tablesData || []);
-      setOrders(ordersData || []);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch data",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+    const [t, o] = await Promise.all([dataApi.getTables(), dataApi.getActiveOrders()]);
+    setTables(t);
+    setOrders(o);
   };
 
   const processPayment = async (orderId: string) => {
     try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        toast({
-          title: "Demo Mode",
-          description: "Connect Supabase to enable real payment processing",
-        });
-        return;
-      }
-
-      const { error } = await supabase
-        .from('orders')
-        .update({ 
-          status: 'completed',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Payment Processed",
-        description: "Order has been completed successfully",
-      });
-
-      fetchTablesAndOrders();
+      await dataApi.completeOrder(orderId);
+      toast({ title: "Payment Processed (Demo)", description: "Order has been completed locally." });
+      await fetchTablesAndOrders();
     } catch (error) {
-      console.error('Error processing payment:', error);
-      toast({
-        title: "Error",
-        description: "Failed to process payment",
-        variant: "destructive",
-      });
+      console.error("Error processing payment:", error);
+      toast({ title: "Error", description: "Failed to process payment", variant: "destructive" });
     }
   };
 
-  const getTableOrders = (tableId: string) => {
-    return orders.filter(order => order.table_id === tableId);
-  };
-
-  const getTableTotal = (tableId: string) => {
-    return getTableOrders(tableId).reduce((sum, order) => sum + order.total_amount, 0);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'available': return 'bg-success text-success-foreground';
-      case 'occupied': return 'bg-destructive text-destructive-foreground';
-      case 'reserved': return 'bg-warning text-warning-foreground';
-      default: return 'bg-muted text-muted-foreground';
-    }
-  };
+  const getTableOrders = (tableId: string) => orders.filter((order) => order.table_id === tableId);
+  const getTableTotal = (tableId: string) =>
+    getTableOrders(tableId).reduce((sum, order) => sum + order.total_amount, 0);
 
   const getOrderStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-warning text-warning-foreground';
-      case 'accepted': return 'bg-primary text-primary-foreground';
-      case 'preparing': return 'bg-secondary text-secondary-foreground';
-      case 'ready': return 'bg-success text-success-foreground';
-      default: return 'bg-muted text-muted-foreground';
+      case "pending":
+        return "bg-warning text-warning-foreground";
+      case "accepted":
+        return "bg-primary text-primary-foreground";
+      case "preparing":
+        return "bg-secondary text-secondary-foreground";
+      case "ready":
+        return "bg-success text-success-foreground";
+      default:
+        return "bg-muted text-muted-foreground";
     }
   };
 
@@ -229,21 +207,24 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
                     const tableOrders = getTableOrders(table.id);
                     const tableTotal = getTableTotal(table.id);
                     const hasOrders = tableOrders.length > 0;
-                    
                     return (
-                      <Card 
+                      <Card
                         key={table.id}
                         className={`cursor-pointer transition-smooth hover:shadow-elegant ${
-                          selectedTable === table.id ? 'ring-2 ring-primary' : ''
+                          selectedTable === table.id ? "ring-2 ring-primary" : ""
                         }`}
                         onClick={() => setSelectedTable(table.id)}
                       >
                         <CardContent className="p-4 text-center">
-                          <div className="text-lg font-bold mb-2">
-                            Table {table.table_number}
-                          </div>
-                          <Badge className={`mb-2 ${hasOrders ? 'bg-destructive text-destructive-foreground' : 'bg-success text-success-foreground'}`}>
-                            {hasOrders ? 'In Progress' : 'Available'}
+                          <div className="text-lg font-bold mb-2">Table {table.table_number}</div>
+                          <Badge
+                            className={`mb-2 ${
+                              hasOrders
+                                ? "bg-destructive text-destructive-foreground"
+                                : "bg-success text-success-foreground"
+                            }`}
+                          >
+                            {hasOrders ? "In Progress" : "Available"}
                           </Badge>
                           {hasOrders && (
                             <div className="text-sm">
@@ -266,7 +247,9 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Receipt className="w-5 h-5" />
-                  {selectedTable ? `Table ${tables.find(t => t.id === selectedTable)?.table_number} Details` : 'Select a Table'}
+                  {selectedTable
+                    ? `Table ${tables.find((t) => t.id === selectedTable)?.table_number} Details`
+                    : "Select a Table"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -277,22 +260,20 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
                         <CardContent className="p-4">
                           <div className="flex justify-between items-start mb-3">
                             <div>
-                              <p className="font-semibold">
-                                {order.customer_name || 'Guest'}
-                              </p>
+                              <p className="font-semibold">{order.customer_name || "Guest"}</p>
                               <p className="text-sm text-muted-foreground">
                                 {new Date(order.created_at).toLocaleTimeString()}
                               </p>
                             </div>
-                            <Badge className={getOrderStatusColor(order.status)}>
-                              {order.status}
-                            </Badge>
+                            <Badge className={getOrderStatusColor(order.status)}>{order.status}</Badge>
                           </div>
 
                           <div className="space-y-2 mb-4">
                             {order.order_items.map((item, index) => (
                               <div key={index} className="flex justify-between text-sm">
-                                <span>{item.menu_items.name} x{item.quantity}</span>
+                                <span>
+                                  {item.menu_items.name} x{item.quantity}
+                                </span>
                                 <span>${(item.price_per_item * item.quantity).toFixed(2)}</span>
                               </div>
                             ))}
@@ -302,16 +283,11 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
 
                           <div className="flex justify-between items-center mb-4">
                             <span className="font-bold">Total:</span>
-                            <span className="font-bold text-primary">
-                              ${order.total_amount.toFixed(2)}
-                            </span>
+                            <span className="font-bold text-primary">${order.total_amount.toFixed(2)}</span>
                           </div>
 
-                          {order.status === 'ready' && (
-                            <Button 
-                              className="w-full" 
-                              onClick={() => processPayment(order.id)}
-                            >
+                          {order.status === "ready" && (
+                            <Button className="w-full" onClick={() => processPayment(order.id)}>
                               <CreditCard className="w-4 h-4 mr-2" />
                               Process Payment
                             </Button>

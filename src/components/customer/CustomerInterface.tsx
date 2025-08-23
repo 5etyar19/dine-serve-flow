@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { MenuCard } from "./MenuCard";
-import { supabase } from "@/lib/supabase";
 import { ShoppingCart, Utensils, Coffee, Cake, ArrowLeft, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import burgerImage from "@/assets/food-burger.jpg";
@@ -34,34 +33,40 @@ interface CustomerInterfaceProps {
   onBack: () => void;
 }
 
-const MOCK_MENU = [
+const MOCK_MENU: MenuItem[] = [
   {
     id: "1",
     name: "Signature Gourmet Burger",
-    description: "Juicy beef patty with aged cheddar, caramelized onions, crispy bacon, and our special sauce on a brioche bun",
+    description:
+      "Juicy beef patty with aged cheddar, caramelized onions, crispy bacon, and our special sauce on a brioche bun",
     price: 18.99,
-    image: burgerImage,
+    image_url: burgerImage,
     category: "Main Course",
-    isVegetarian: false
+    is_vegetarian: false,
+    is_available: true,
   },
   {
-    id: "2", 
+    id: "2",
     name: "Fresh Caesar Salad",
-    description: "Crisp romaine lettuce with grilled chicken, parmesan cheese, croutons, and house-made Caesar dressing",
+    description:
+      "Crisp romaine lettuce with grilled chicken, parmesan cheese, croutons, and house-made Caesar dressing",
     price: 14.99,
-    image: saladImage,
+    image_url: saladImage,
     category: "Salads",
-    isVegetarian: false
+    is_vegetarian: false,
+    is_available: true,
   },
   {
     id: "3",
     name: "Chocolate Decadence",
-    description: "Rich dark chocolate mousse with fresh berries, whipped cream, and a delicate chocolate tuile",
+    description:
+      "Rich dark chocolate mousse with fresh berries, whipped cream, and a delicate chocolate tuile",
     price: 12.99,
-    image: dessertImage,
+    image_url: dessertImage,
     category: "Desserts",
-    isVegetarian: true
-  }
+    is_vegetarian: true,
+    is_available: true,
+  },
 ];
 
 export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
@@ -77,192 +82,58 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
   const categories = ["All", "Main Course", "Salads", "Desserts", "Beverages"];
 
   useEffect(() => {
-    fetchMenuItems();
+    setMenuItems(MOCK_MENU);
+    setLoading(false);
   }, []);
 
-  const fetchMenuItems = async () => {
-    try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        // Use mock data when Supabase isn't configured
-        setMenuItems(MOCK_MENU.map(item => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          image_url: item.image,
-          category: item.category,
-          is_vegetarian: item.isVegetarian,
-          is_available: true
-        })));
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('menu_items')
-        .select('*')
-        .eq('is_available', true)
-        .order('category', { ascending: true });
-
-      if (error) throw error;
-      
-      // Use database items if available, otherwise fallback to mock data
-      if (data && data.length > 0) {
-        setMenuItems(data);
-      } else {
-        setMenuItems(MOCK_MENU.map(item => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          image_url: item.image,
-          category: item.category,
-          is_vegetarian: item.isVegetarian,
-          is_available: true
-        })));
-      }
-    } catch (error) {
-      console.error('Error fetching menu items:', error);
-      // Fallback to mock data
-      setMenuItems(MOCK_MENU.map(item => ({
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        price: item.price,
-        image_url: item.image,
-        category: item.category,
-        is_vegetarian: item.isVegetarian,
-        is_available: true
-      })));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleQuantityChange = (id: string, quantity: number) => {
-    const item = menuItems.find(item => item.id === id);
+    const item = menuItems.find((i) => i.id === id);
     if (!item) return;
 
-    setCart(prevCart => {
-      const existingItem = prevCart.find(cartItem => cartItem.id === id);
-      
+    setCart((prev) => {
+      const existing = prev.find((c) => c.id === id);
+
       if (quantity === 0) {
-        return prevCart.filter(cartItem => cartItem.id !== id);
+        return prev.filter((c) => c.id !== id);
       }
-      
-      if (existingItem) {
-        return prevCart.map(cartItem =>
-          cartItem.id === id ? { ...cartItem, quantity } : cartItem
-        );
+      if (existing) {
+        return prev.map((c) => (c.id === id ? { ...c, quantity } : c));
       }
-      
-      return [...prevCart, { id, name: item.name, price: item.price, quantity }];
+      return [...prev, { id, name: item.name, price: item.price, quantity }];
     });
   };
 
-  const getCartQuantity = (id: string) => {
-    return cart.find(item => item.id === id)?.quantity || 0;
-  };
-
-  const getTotalPrice = () => {
-    return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
-  };
-
-  const getTotalItems = () => {
-    return cart.reduce((total, item) => total + item.quantity, 0);
-  };
+  const getCartQuantity = (id: string) => cart.find((i) => i.id === id)?.quantity || 0;
+  const getTotalPrice = () => cart.reduce((t, i) => t + i.price * i.quantity, 0);
+  const getTotalItems = () => cart.reduce((t, i) => t + i.quantity, 0);
 
   const placeOrder = async () => {
     if (cart.length === 0) return;
-    
     setPlacing(true);
     try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        // Mock order placement
-        toast({
-          title: "Demo Order Placed!",
-          description: `Your order for $${getTotalPrice().toFixed(2)} has been simulated. Connect Supabase for real functionality.`,
-        });
-        setCart([]);
-        setCustomerName("");
-        setShowCart(false);
-        return;
-      }
-
-      // Get a random table (in real app, this would be from QR code)
-      const { data: tables } = await supabase
-        .from('tables')
-        .select('id')
-        .eq('status', 'available')
-        .limit(1);
-
-      const tableId = tables?.[0]?.id || 'table-1';
-      
-      // Create order
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert([{
-          table_id: tableId,
-          customer_name: customerName || null,
-          total_amount: getTotalPrice(),
-          status: 'pending'
-        }])
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-
-      // Create order items
-      const orderItems = cart.map(item => ({
-        order_id: order.id,
-        menu_item_id: item.id,
-        quantity: item.quantity,
-        price_per_item: item.price
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
-
-      // Update table status
-      await supabase
-        .from('tables')
-        .update({ status: 'occupied' })
-        .eq('id', tableId);
-
       toast({
-        title: "Order Placed Successfully!",
-        description: `Your order for $${getTotalPrice().toFixed(2)} has been sent to the kitchen.`,
+        title: "Demo Order Placed!",
+        description: `Your order for $${getTotalPrice().toFixed(2)} has been simulated.`,
       });
-
       setCart([]);
       setCustomerName("");
       setShowCart(false);
-    } catch (error) {
-      console.error('Error placing order:', error);
-      toast({
-        title: "Error",
-        description: "Failed to place order. Please try again.",
-        variant: "destructive",
-      });
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to place order.", variant: "destructive" });
     } finally {
       setPlacing(false);
     }
   };
 
-  const filteredMenu = activeCategory === "All" 
-    ? menuItems 
-    : menuItems.filter(item => item.category === activeCategory);
+  const filteredMenu = activeCategory === "All"
+    ? menuItems
+    : menuItems.filter((i) => i.category === activeCategory);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
           <p className="text-muted-foreground">Loading menu...</p>
         </div>
       </div>
@@ -332,24 +203,24 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
                     </div>
                   ))}
                 </div>
-                
+
                 <Separator className="my-4" />
-                
+
                 <div className="flex justify-between items-center mb-6">
                   <span className="text-xl font-bold">Total:</span>
                   <span className="text-xl font-bold text-primary">
                     ${getTotalPrice().toFixed(2)}
                   </span>
                 </div>
-                
-                <Button 
-                  variant="hero" 
-                  className="w-full" 
+
+                <Button
+                  variant="hero"
+                  className="w-full"
                   size="lg"
                   onClick={placeOrder}
                   disabled={placing}
                 >
-                  {placing ? 'Placing Order...' : 'Place Order'}
+                  {placing ? "Placing Order..." : "Place Order"}
                 </Button>
               </CardContent>
             </Card>
@@ -377,7 +248,7 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
                 <p className="text-muted-foreground text-sm">Table #12</p>
               </div>
             </div>
-            
+
             {getTotalItems() > 0 && (
               <Button variant="hero" className="relative" onClick={() => setShowCart(true)}>
                 <ShoppingCart className="w-4 h-4 mr-2" />
@@ -427,7 +298,7 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
           ))}
         </div>
 
-        {/* Cart Summary */}
+        {/* Cart Summary (sticky bar) */}
         {cart.length > 0 && (
           <Card className="sticky bottom-4 shadow-elegant bg-card/95 backdrop-blur-sm">
             <CardHeader className="pb-2">
@@ -449,22 +320,17 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
                   </div>
                 ))}
               </div>
-              
+
               <Separator className="my-3" />
-              
+
               <div className="flex justify-between items-center mb-4">
                 <span className="text-lg font-bold">Total:</span>
                 <span className="text-lg font-bold text-primary">
                   ${getTotalPrice().toFixed(2)}
                 </span>
               </div>
-              
-              <Button 
-                variant="hero" 
-                className="w-full" 
-                size="lg"
-                onClick={() => setShowCart(true)}
-              >
+
+              <Button variant="hero" className="w-full" size="lg" onClick={() => setShowCart(true)}>
                 Review & Place Order
               </Button>
             </CardContent>
