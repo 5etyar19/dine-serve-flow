@@ -79,54 +79,8 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
   const categoryList = ["All", ...categories.map(cat => cat.name)];
 
   useEffect(() => {
-    fetchMenuItems();
-  }, []);
-
-  const fetchMenuItems = async () => {
-    try {
-      // Check if Supabase is configured
-      if (!supabase) {
-        // Use mock data when Supabase isn't configured
-        setMenuItems(MOCK_MENU.map(item => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          image_url: item.image,
-          category: item.category,
-          is_vegetarian: item.isVegetarian,
-          is_available: true
-        })));
-        setLoading(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('menu_items')
-        .select('*')
-        .eq('is_available', true)
-        .order('category', { ascending: true });
-
-      if (error) throw error;
-      
-      // Use database items if available, otherwise fallback to mock data
-      if (data && data.length > 0) {
-        setMenuItems(data);
-      } else {
-        setMenuItems(MOCK_MENU.map(item => ({
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          image_url: item.image,
-          category: item.category,
-          is_vegetarian: item.isVegetarian,
-          is_available: true
-        })));
-      }
-    } catch (error) {
-      console.error('Error fetching menu items:', error);
-      // Fallback to mock data
+    // If no items from admin yet, use mock data as fallback
+    if (menuItems.length === 0) {
       setMenuItems(MOCK_MENU.map(item => ({
         id: item.id,
         name: item.name,
@@ -137,10 +91,9 @@ export const CustomerInterface = ({ onBack }: CustomerInterfaceProps) => {
         is_vegetarian: item.isVegetarian,
         is_available: true
       })));
-    } finally {
-      setLoading(false);
     }
-  };
+    setLoading(false);
+  }, []);
 
   const handleQuantityChange = (id: string, quantity: number) => {
     const item = menuItems.find(item => item.id === id);
