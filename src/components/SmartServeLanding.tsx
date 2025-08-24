@@ -37,7 +37,7 @@ export const SmartServeLanding = () => {
       description: "Customers scan QR codes on tables to access the digital menu and place orders instantly"
     },
     {
-      icon: <ChefHat className="w-8 h-8 text-primary" />,
+      icon: <ChefHat className="w-4 h-4 text-primary" />,
       title: "Kitchen Management", 
       description: "Real-time order notifications with accept/reject functionality and preparation tracking"
     },

@@ -476,3 +476,8 @@ function RealtimeTables({ onEdit, onDelete }: { onEdit: (id: string, n: number) 
     </div>
   );
 }
+
+
+
+
+
