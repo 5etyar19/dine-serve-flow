@@ -7,6 +7,11 @@ import { MenuProvider } from "@/contexts/MenuContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
+// NEW: import the two screens
+import { CashierInterface } from "@/components/interfaces/CashierInterface";
+import { CustomerInterface } from "@/components/customer/CustomerInterface";
+import { AdminDashboard } from "@/components/interfaces/AdminDashboard";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -18,6 +23,23 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+
+            <Route
+              path="/cashier"
+              element={<CashierInterface onBack={() => window.history.back()} />}
+            />
+            {/* NEW: admin dashboard */}
+            <Route
+              path="/admin"
+              element={<AdminDashboard onBack={() => window.history.back()} />}
+            />
+
+            {/* NEW: deep link per table, e.g. /t/12 */}
+            <Route
+              path="/t/:tableNumber"
+              element={<CustomerInterface onBack={() => window.history.back()} />}
+            />
+
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

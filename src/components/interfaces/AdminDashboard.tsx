@@ -7,27 +7,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, BarChart3, DollarSign, TrendingUp, Clock, ChefHat, Plus, Edit, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, BarChart3, DollarSign, TrendingUp, Clock, ChefHat, Plus, Edit, Trash2, Upload, QrCode } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMenu } from "@/contexts/MenuContext";
 import { db, storage, nowTs } from "@/lib/firebase";
-import {
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  collection,
-} from "firebase/firestore";
+import { addDoc, updateDoc, deleteDoc, doc, collection } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import QRCode from "qrcode";
 
 interface OrderAnalytics {
   id: string;
-  table_id?: string;
-  customer_name?: string | null;
   total_amount: number;
   status: string;
   created_at: string | any;
-  tables?: { table_number: number };
   order_items: Array<{ quantity: number; menu_items: { name: string } }>;
 }
 
@@ -46,7 +38,7 @@ interface Table { id: string; table_number: number }
 export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const { toast } = useToast();
   const { menuItems, categories } = useMenu();
-  const [orders] = useState<OrderAnalytics[]>([]); // analytics placeholder – wire later if needed
+  const [orders] = useState<OrderAnalytics[]>([]);
 
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
@@ -63,6 +55,29 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     const r = ref(storage, key);
     await uploadBytes(r, file);
     return await getDownloadURL(r);
+  }
+
+  // ---------- QR helper ----------
+  async function generateAndDownloadTableQR(tableNumber: number, alsoUpload = false) {
+    const url = `${window.location.origin}/t/${tableNumber}`;
+    const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 512 });
+
+    // Download PNG locally
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `table-${tableNumber}-qr.png`;
+    a.click();
+
+    if (alsoUpload) {
+      const blob = await (await fetch(dataUrl)).blob();
+      const path = `qr-codes/table-${tableNumber}.png`;
+      const r = ref(storage, path);
+      await uploadBytes(r, blob);
+      const qrUrl = await getDownloadURL(r);
+      toast({ title: "QR uploaded", description: qrUrl });
+      return qrUrl;
+    }
+    return null;
   }
 
   // ---------- Items ----------
@@ -190,7 +205,6 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
   const ordersByStatus = { pending: 0, accepted: 0, preparing: 0, ready: 0, completed: 0, cancelled: 0 };
   const totalRevenue = 0;
-  const mostDemandedItems: [string, number][] = [];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -210,7 +224,9 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button variant="outline" onClick={onBack}><ArrowLeft className="w-4 h-4 mr-2"/>Back</Button>
+              <Button variant="outline" onClick={onBack}>
+                <ArrowLeft className="w-4 h-4 mr-2" />Back
+              </Button>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">Admin Dashboard</h1>
                 <p className="text-muted-foreground text-sm">Restaurant Management & Analytics</p>
@@ -409,25 +425,26 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                 </CardContent>
               </Card>
 
-              {/* Simple list fed by context */}
+              {/* Tables list with QR button */}
               <Card>
                 <CardHeader><CardTitle>Tables</CardTitle></CardHeader>
                 <CardContent>
                   <RealtimeTables
                     onEdit={(id, n) => { setEditingTableId(id); setTableForm({ table_number: n }); }}
                     onDelete={(id) => deleteTable(id)}
+                    onGenerateQR={(n) => generateAndDownloadTableQR(n /* , true to also upload */)}
                   />
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
-          {/* Orders / Analytics placeholders keep UI consistent */}
+          {/* Orders / Analytics placeholders */}
           <TabsContent value="orders">
             <Card>
               <CardHeader><CardTitle className="flex items-center gap-2"><Clock className="w-5 h-5"/>Most Recent Orders</CardTitle></CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">Connect orders next (customer places write to Firestore). This tab will auto-populate.</p>
+                <p className="text-muted-foreground">Connect orders realtime later.</p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -460,7 +477,15 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   );
 };
 
-function RealtimeTables({ onEdit, onDelete }: { onEdit: (id: string, n: number) => void; onDelete: (id: string) => void }) {
+function RealtimeTables({
+  onEdit,
+  onDelete,
+  onGenerateQR,
+}: {
+  onEdit: (id: string, n: number) => void;
+  onDelete: (id: string) => void;
+  onGenerateQR: (tableNumber: number) => void;
+}) {
   const { tables } = useMenu();
   return (
     <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -470,14 +495,13 @@ function RealtimeTables({ onEdit, onDelete }: { onEdit: (id: string, n: number) 
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={() => onEdit(t.id, t.table_number)}><Edit className="w-4 h-4" /></Button>
             <Button size="sm" variant="outline" onClick={() => onDelete(t.id)}><Trash2 className="w-4 h-4" /></Button>
+            {/* NEW: QR button */}
+            <Button size="sm" variant="outline" title="Generate QR" onClick={() => onGenerateQR(t.table_number)}>
+              <QrCode className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       ))}
     </div>
   );
 }
-
-
-
-
-

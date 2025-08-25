@@ -1,160 +1,227 @@
-// CashierInterface.tsx (Supabase removed, demo API fixed)
-import { useState, useEffect } from "react";
+// src/components/interfaces/CashierInterface.tsx
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, CreditCard, Receipt, Users, DollarSign, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  collection,
+  doc,
+  getDocs,
+  onSnapshot,
+  query,
+  updateDoc,
+  where,
+  Timestamp,
+} from "firebase/firestore";
+import { db, nowTs } from "@/lib/firebase";
 
-// --- Types ---
+type TableStatus = "available" | "occupied" | "reserved";
+
 interface Table {
   id: string;
   table_number: number;
-  status: "available" | "occupied" | "reserved";
+  status?: TableStatus;
+}
+
+type OrderStatus = "pending" | "accepted" | "preparing" | "ready" | "completed" | "cancelled";
+
+interface OrderItem {
+  item_id?: string;
+  name: string;
+  quantity: number;
+  price_per_item: number;
+  note?: string | null;
 }
 
 interface Order {
   id: string;
-  table_id: string;
+  table_number: number;            // <-- from CustomerInterface
   customer_name: string | null;
-  status: "pending" | "accepted" | "preparing" | "ready" | "completed" | "cancelled";
+  status: OrderStatus;
   total_amount: number;
-  created_at: string;
-  tables: { table_number: number };
-  order_items: Array<{
-    quantity: number;
-    price_per_item: number;
-    menu_items: { name: string };
-  }>;
+  created_at: Timestamp | string;  // Firestore Timestamp or ISO string
+  items: OrderItem[];              // <-- from CustomerInterface
 }
 
-interface CashierInterfaceProps {
-  onBack: () => void;
+const ACTIVE_STATUSES: OrderStatus[] = ["pending", "accepted", "preparing", "ready"];
+
+function toDate(val: Timestamp | string): Date {
+  // Firestore Timestamp -> Date; otherwise parse string
+  // @ts-ignore
+  return val?.toDate ? (val as Timestamp).toDate() : new Date(val as string);
 }
 
-// --- Local demo data & API (replaces Supabase entirely) ---
-let demoTables: Table[] = [
-  { id: "t-1", table_number: 1, status: "available" },
-  { id: "t-2", table_number: 2, status: "available" },
-  { id: "t-3", table_number: 3, status: "occupied" },
-  { id: "t-4", table_number: 4, status: "available" },
-  { id: "t-5", table_number: 5, status: "reserved" },
-];
-
-let demoOrders: Order[] = [
-  {
-    id: "o-1",
-    table_id: "t-3",
-    customer_name: "Guest",
-    status: "ready",
-    total_amount: 31.98,
-    created_at: new Date().toISOString(),
-    tables: { table_number: 3 },
-    order_items: [
-      { quantity: 1, price_per_item: 18.99, menu_items: { name: "Signature Gourmet Burger" } },
-      { quantity: 1, price_per_item: 12.99, menu_items: { name: "Chocolate Decadence" } },
-    ],
-  },
-];
-
-const ACTIVE_STATUSES = new Set<Order["status"]>(["pending", "accepted", "preparing", "ready"]);
-
-const dataApi = {
-  async getTables(): Promise<Table[]> {
-    return [...demoTables];
-  },
-  async getActiveOrders(): Promise<Order[]> {
-    return demoOrders.filter((o) => ACTIVE_STATUSES.has(o.status));
-  },
-  async completeOrder(orderId: string): Promise<void> {
-    // mark the order completed
-    demoOrders = demoOrders.map((o) => (o.id === orderId ? { ...o, status: "completed" } : o));
-
-    // find affected order's table
-    const affected = demoOrders.find((o) => o.id === orderId);
-    if (!affected) return;
-
-    // if no active orders remain on that table, free the table
-    const stillActive = demoOrders.some(
-      (o) => o.table_id === affected.table_id && ACTIVE_STATUSES.has(o.status)
-    );
-
-    if (!stillActive) {
-      demoTables = demoTables.map((t) =>
-        t.id === affected.table_id ? { ...t, status: "available" } : t
-      );
-    }
-  },
-  // no-op realtime
-  subscribeOrders(_cb: () => void): () => void {
-    return () => {};
-  },
-};
-
-export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
+export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
+  const { toast } = useToast();
   const [tables, setTables] = useState<Table[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
 
+  // ---- realtime subscriptions ----
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [t, o] = await Promise.all([dataApi.getTables(), dataApi.getActiveOrders()]);
-        setTables(t);
-        setOrders(o);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        toast({ title: "Error", description: "Failed to fetch data", variant: "destructive" });
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    setLoading(true);
 
-    const unsub = dataApi.subscribeOrders(load); // no-op in demo
-    return () => unsub();
+    const unsubTables = onSnapshot(collection(db, "tables"), (snap) => {
+      const rows: Table[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setTables(rows);
+    });
+
+    // Listen to active orders only
+    const qOrders = query(
+      collection(db, "orders"),
+      where("status", "in", ACTIVE_STATUSES)
+    );
+    const unsubOrders = onSnapshot(qOrders, (snap) => {
+      const rows: Order[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setOrders(rows);
+      setLoading(false);
+    }, (err) => {
+      console.error(err);
+      toast({ title: "Error", description: "Failed to subscribe to orders", variant: "destructive" });
+      setLoading(false);
+    });
+
+    return () => {
+      unsubTables();
+      unsubOrders();
+    };
   }, [toast]);
 
-  const fetchTablesAndOrders = async () => {
-    const [t, o] = await Promise.all([dataApi.getTables(), dataApi.getActiveOrders()]);
-    setTables(t);
-    setOrders(o);
-  };
+  // Helpers
+  const getTableOrdersByNumber = (tableNumber: number) =>
+    orders.filter((order) => order.table_number === tableNumber);
 
-  const processPayment = async (orderId: string) => {
+  const getTableTotalByNumber = (tableNumber: number) =>
+    getTableOrdersByNumber(tableNumber).reduce((sum, order) => sum + (order.total_amount || 0), 0);
+
+  const selectedTableNumber = useMemo(() => {
+    if (!selectedTableId) return undefined;
+    return tables.find((t) => t.id === selectedTableId)?.table_number;
+  }, [selectedTableId, tables]);
+
+  const selectedOrders = useMemo(() => {
+    if (selectedTableNumber == null) return [];
+    return getTableOrdersByNumber(selectedTableNumber);
+  }, [selectedTableNumber, orders]);
+
+  const selectedTableTotal = useMemo(() => {
+    if (selectedTableNumber == null) return 0;
+    return getTableTotalByNumber(selectedTableNumber);
+  }, [selectedTableNumber, orders]);
+
+  // ---- payment processing ----
+  async function processPayment(order: Order) {
     try {
-      await dataApi.completeOrder(orderId);
-      toast({ title: "Payment Processed (Demo)", description: "Order has been completed locally." });
-      await fetchTablesAndOrders();
-    } catch (error) {
-      console.error("Error processing payment:", error);
+      // 1) mark order completed
+      await updateDoc(doc(db, "orders", order.id), {
+        status: "completed",
+        paid_at: nowTs(),
+      });
+
+      // 2) if table has no other active orders, free it
+      const qActiveSameTable = query(
+        collection(db, "orders"),
+        where("table_number", "==", order.table_number),
+        where("status", "in", ACTIVE_STATUSES)
+      );
+      const stillActive = await getDocs(qActiveSameTable);
+
+      if (stillActive.empty) {
+        const tableDoc = tables.find((t) => t.table_number === order.table_number);
+        if (tableDoc) {
+          await updateDoc(doc(db, "tables", tableDoc.id), { status: "available" });
+        }
+      }
+
+      toast({ title: "Payment processed", description: `Order #${order.id} completed` });
+    } catch (e) {
+      console.error(e);
       toast({ title: "Error", description: "Failed to process payment", variant: "destructive" });
     }
-  };
+  }
 
-  const getTableOrders = (tableId: string) => orders.filter((order) => order.table_id === tableId);
-  const getTableTotal = (tableId: string) =>
-    getTableOrders(tableId).reduce((sum, order) => sum + order.total_amount, 0);
+  // ---- print receipt ----
+  function printReceipt(order: Order) {
+    const dt = toDate(order.created_at);
+    const lines = order.items.map(
+      (it) =>
+        `<tr>
+          <td style="text-align:left;">${escapeHtml(it.name)} x${it.quantity}</td>
+          <td style="text-align:right;">$${(it.price_per_item * it.quantity).toFixed(2)}</td>
+        </tr>`
+    ).join("");
 
-  const getOrderStatusColor = (status: Order["status"]) => {
+    const total = (order.total_amount || 0).toFixed(2);
+
+    const html = `
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Receipt - Table ${order.table_number}</title>
+    <style>
+      * { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+      body { margin: 0; padding: 16px; }
+      .center { text-align:center; }
+      .muted { color: #666; font-size: 12px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+      td { padding: 4px 0; }
+      .totals { margin-top: 8px; border-top: 1px dashed #999; padding-top: 8px; }
+      .bold { font-weight: 700; }
+    </style>
+  </head>
+  <body>
+    <div class="center">
+      <div class="bold">SmartServe</div>
+      <div class="muted">${dt.toLocaleDateString()} ${dt.toLocaleTimeString()}</div>
+      <div class="muted">Table #${order.table_number} • ${escapeHtml(order.customer_name || "Guest")}</div>
+    </div>
+
+    <table>
+      <tbody>
+        ${lines}
+      </tbody>
+    </table>
+
+    <div class="totals">
+      <table>
+        <tr>
+          <td class="bold">Total</td>
+          <td style="text-align:right;" class="bold">$${total}</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="center" style="margin-top:12px;">Thank you!</div>
+    <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 300); }</script>
+  </body>
+</html>`.trim();
+
+    const w = window.open("", "_blank", "width=380,height=640");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+  }
+
+  function escapeHtml(s: string) {
+    return s.replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[m]!));
+  }
+
+  const getOrderStatusColor = (status: OrderStatus) => {
     switch (status) {
-      case "pending":
-        return "bg-warning text-warning-foreground";
-      case "accepted":
-        return "bg-primary text-primary-foreground";
-      case "preparing":
-        return "bg-secondary text-secondary-foreground";
-      case "ready":
-        return "bg-success text-success-foreground";
-      default:
-        return "bg-muted text-muted-foreground";
+      case "pending": return "bg-warning text-warning-foreground";
+      case "accepted": return "bg-primary text-primary-foreground";
+      case "preparing": return "bg-secondary text-secondary-foreground";
+      case "ready": return "bg-success text-success-foreground";
+      default: return "bg-muted text-muted-foreground";
     }
   };
-
-  const selectedOrder = selectedTable ? getTableOrders(selectedTable) : [];
 
   if (loading) {
     return (
@@ -209,16 +276,16 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                   {tables.map((table) => {
-                    const tableOrders = getTableOrders(table.id);
-                    const tableTotal = getTableTotal(table.id);
+                    const tableOrders = getTableOrdersByNumber(table.table_number);
+                    const tableTotal = getTableTotalByNumber(table.table_number);
                     const hasOrders = tableOrders.length > 0;
                     return (
                       <Card
                         key={table.id}
                         className={`cursor-pointer transition-smooth hover:shadow-elegant ${
-                          selectedTable === table.id ? "ring-2 ring-primary" : ""
+                          selectedTableId === table.id ? "ring-2 ring-primary" : ""
                         }`}
-                        onClick={() => setSelectedTable(table.id)}
+                        onClick={() => setSelectedTableId(table.id)}
                       >
                         <CardContent className="p-4 text-center">
                           <div className="text-lg font-bold mb-2">Table {table.table_number}</div>
@@ -229,7 +296,7 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
                                 : "bg-success text-success-foreground"
                             }`}
                           >
-                            {hasOrders ? "In Progress" : "Available"}
+                            {hasOrders ? "In Progress" : (table.status ?? "Available")}
                           </Badge>
                           {hasOrders && (
                             <div className="text-sm">
@@ -252,33 +319,31 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Receipt className="w-5 h-5" />
-                  {selectedTable
-                    ? `Table ${tables.find((t) => t.id === selectedTable)?.table_number} Details`
+                  {selectedTableNumber != null
+                    ? `Table ${selectedTableNumber} Details`
                     : "Select a Table"}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {selectedTable && selectedOrder.length > 0 ? (
+                {selectedTableNumber != null && selectedOrders.length > 0 ? (
                   <div className="space-y-4">
-                    {selectedOrder.map((order) => (
+                    {selectedOrders.map((order) => (
                       <Card key={order.id} className="border-l-4 border-l-primary">
                         <CardContent className="p-4">
                           <div className="flex justify-between items-start mb-3">
                             <div>
                               <p className="font-semibold">{order.customer_name || "Guest"}</p>
                               <p className="text-sm text-muted-foreground">
-                                {new Date(order.created_at).toLocaleTimeString()}
+                                {toDate(order.created_at).toLocaleTimeString()}
                               </p>
                             </div>
                             <Badge className={getOrderStatusColor(order.status)}>{order.status}</Badge>
                           </div>
 
                           <div className="space-y-2 mb-4">
-                            {order.order_items.map((item, index) => (
-                              <div key={index} className="flex justify-between text-sm">
-                                <span>
-                                  {item.menu_items.name} x{item.quantity}
-                                </span>
+                            {order.items.map((item, idx) => (
+                              <div key={idx} className="flex justify-between text-sm">
+                                <span>{item.name} x{item.quantity}</span>
                                 <span>${(item.price_per_item * item.quantity).toFixed(2)}</span>
                               </div>
                             ))}
@@ -288,15 +353,21 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
 
                           <div className="flex justify-between items-center mb-4">
                             <span className="font-bold">Total:</span>
-                            <span className="font-bold text-primary">${order.total_amount.toFixed(2)}</span>
+                            <span className="font-bold text-primary">${(order.total_amount || 0).toFixed(2)}</span>
                           </div>
 
-                          {order.status === "ready" && (
-                            <Button className="w-full" onClick={() => processPayment(order.id)}>
-                              <CreditCard className="w-4 h-4 mr-2" />
-                              Process Payment
+                          <div className="grid grid-cols-2 gap-2">
+                            <Button variant="outline" onClick={() => printReceipt(order)}>
+                              <Receipt className="w-4 h-4 mr-2" />
+                              Print Receipt
                             </Button>
-                          )}
+                            {order.status === "ready" && (
+                              <Button onClick={() => processPayment(order)}>
+                                <CreditCard className="w-4 h-4 mr-2" />
+                                Process Payment
+                              </Button>
+                            )}
+                          </div>
                         </CardContent>
                       </Card>
                     ))}
@@ -305,12 +376,12 @@ export const CashierInterface = ({ onBack }: CashierInterfaceProps) => {
                       <div className="flex justify-between items-center">
                         <span className="text-lg font-bold">Table Total:</span>
                         <span className="text-xl font-bold text-primary">
-                          ${getTableTotal(selectedTable).toFixed(2)}
+                          ${selectedTableTotal.toFixed(2)}
                         </span>
                       </div>
                     </div>
                   </div>
-                ) : selectedTable && selectedOrder.length === 0 ? (
+                ) : selectedTableNumber != null && selectedOrders.length === 0 ? (
                   <div className="text-center py-8">
                     <Clock className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                     <p className="text-muted-foreground">No active orders for this table</p>
