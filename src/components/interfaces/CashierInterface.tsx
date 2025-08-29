@@ -55,7 +55,6 @@
 //   return new Date(val as string);
 // }
 
-
 // export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
 //   const { toast } = useToast();
 //   const [tables, setTables] = useState<Table[]>([]);
@@ -63,6 +62,7 @@
 //   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
 //   const [loading, setLoading] = useState(true);
 
+//   // ---- realtime subscriptions ----
 //   useEffect(() => {
 //     setLoading(true);
 
@@ -71,23 +71,20 @@
 //       setTables(rows);
 //     });
 
+//     // Listen to active orders only
 //     const qOrders = query(
 //       collection(db, "orders"),
 //       where("status", "in", ACTIVE_STATUSES)
 //     );
-//     const unsubOrders = onSnapshot(
-//       qOrders,
-//       (snap) => {
-//         const rows: Order[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-//         setOrders(rows);
-//         setLoading(false);
-//       },
-//       (err) => {
-//         console.error(err);
-//         toast({ title: "Error", description: "Failed to subscribe to orders", variant: "destructive" });
-//         setLoading(false);
-//       }
-//     );
+//     const unsubOrders = onSnapshot(qOrders, (snap) => {
+//       const rows: Order[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+//       setOrders(rows);
+//       setLoading(false);
+//     }, (err) => {
+//       console.error(err);
+//       toast({ title: "Error", description: "Failed to subscribe to orders", variant: "destructive" });
+//       setLoading(false);
+//     });
 
 //     return () => {
 //       unsubTables();
@@ -95,6 +92,7 @@
 //     };
 //   }, [toast]);
 
+//   // Helpers
 //   const getTableOrdersByNumber = (tableNumber: number) =>
 //     orders.filter((order) => order.table_number === tableNumber);
 
@@ -116,10 +114,11 @@
 //     return getTableTotalByNumber(selectedTableNumber);
 //   }, [selectedTableNumber, orders]);
 
+//   // ---- payment processing ----
 //   async function processPaymentForTable() {
 //     if (!selectedTableNumber) return;
 //     try {
-//       // Mark all orders as completed
+//       // Mark all 'ready' orders as completed
 //       const ordersToComplete = selectedOrders.filter((o) => o.status === "ready");
 //       for (const order of ordersToComplete) {
 //         await updateDoc(doc(db, "orders", order.id), {
@@ -150,13 +149,14 @@
 //     }
 //   }
 
+//   // ---- print receipt (merged per table) ----
 //   function printReceiptForTable() {
 //     if (!selectedTableNumber) return;
 //     const allItems: OrderItem[] = [];
 //     let earliestTime: Date | null = null;
 
 //     selectedOrders.forEach((order) => {
-//       allItems.push(...order.items);
+//       allItems.push(...(order.items || []));
 //       const orderTime = toDate(order.created_at);
 //       if (!earliestTime || orderTime < earliestTime) earliestTime = orderTime;
 //     });
@@ -292,7 +292,7 @@
 //               <CardContent>
 //                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
 //                   {tables
-//                   .slice() // create a shallow copy so original state isn’t mutated
+//                   .slice()
 //                   .sort((a, b) => a.table_number - b.table_number)
 //                   .map((table) => {
 //                     const tableOrders = getTableOrdersByNumber(table.table_number);
@@ -405,23 +405,23 @@
 //                 )}
 //               </CardContent>
 //             </Card>
-// {/* Create Order Button */}
-// <div className="my-4 text-right">
-//   <Button
-//     variant="hero"
-//     disabled={!selectedTableId}
-//     onClick={() => {
-//       if (!selectedTableId) return;
-//       const tableNumber = tables.find(t => t.id === selectedTableId)?.table_number;
-//       if (!tableNumber) return;
-//       // Navigate to CustomerInterface with table number
-//       window.location.href = `/t/${tableNumber}`;
-//     }}
-//   >
-//     Create New Order
-//   </Button>
-// </div>
-            
+
+//             {/* Create Order Button */}
+//             <div className="my-4 text-right">
+//               <Button
+//                 variant="hero"
+//                 disabled={!selectedTableId}
+//                 onClick={() => {
+//                   if (!selectedTableId) return;
+//                   const tableNumber = tables.find(t => t.id === selectedTableId)?.table_number;
+//                   if (!tableNumber && tableNumber !== 0) return;
+//                   // Navigate to CustomerInterface with table number
+//                   window.location.href = `/t/${tableNumber}`;
+//                 }}
+//               >
+//                 Create New Order
+//               </Button>
+//             </div>
 //           </div>
 //         </div>
 //       </div>
@@ -431,13 +431,12 @@
 
 
 
-// src/components/interfaces/CashierInterface.tsx
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, CreditCard, Receipt, Users, DollarSign, Clock } from "lucide-react";
+import { ArrowLeft, CreditCard, Receipt, Users, DollarSign, Clock, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   collection,
@@ -582,6 +581,17 @@ export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
     }
   }
 
+  // ---- cancel order ----
+  async function cancelOrder(orderId: string) {
+    try {
+      await updateDoc(doc(db, "orders", orderId), { status: "cancelled" });
+      toast({ title: "Order Cancelled", description: "The order has been cancelled successfully." });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error", description: "Failed to cancel order", variant: "destructive" });
+    }
+  }
+
   // ---- print receipt (merged per table) ----
   function printReceiptForTable() {
     if (!selectedTableNumber) return;
@@ -668,6 +678,7 @@ export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
       case "accepted": return "bg-primary text-primary-foreground";
       case "preparing": return "bg-secondary text-secondary-foreground";
       case "ready": return "bg-success text-success-foreground";
+      case "cancelled": return "bg-destructive text-destructive-foreground";
       default: return "bg-muted text-muted-foreground";
     }
   };
@@ -725,41 +736,41 @@ export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                   {tables
-                  .slice()
-                  .sort((a, b) => a.table_number - b.table_number)
-                  .map((table) => {
-                    const tableOrders = getTableOrdersByNumber(table.table_number);
-                    const tableTotal = getTableTotalByNumber(table.table_number);
-                    const hasOrders = tableOrders.length > 0;
-                    return (
-                      <Card
-                        key={table.id}
-                        className={`cursor-pointer transition-smooth hover:shadow-elegant ${
-                          selectedTableId === table.id ? "ring-2 ring-primary" : ""
-                        }`}
-                        onClick={() => setSelectedTableId(table.id)}
-                      >
-                        <CardContent className="p-4 text-center">
-                          <div className="text-lg font-bold mb-2">Table {table.table_number}</div>
-                          <Badge
-                            className={`mb-2 ${
-                              hasOrders
-                                ? "bg-destructive text-destructive-foreground"
-                                : "bg-success text-success-foreground"
-                            }`}
-                          >
-                            {hasOrders ? "In Progress" : (table.status ?? "Available")}
-                          </Badge>
-                          {hasOrders && (
-                            <div className="text-sm">
-                              <p className="font-medium">${tableTotal.toFixed(2)}</p>
-                              <p className="text-muted-foreground">{tableOrders.length} order(s)</p>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                    .slice()
+                    .sort((a, b) => a.table_number - b.table_number)
+                    .map((table) => {
+                      const tableOrders = getTableOrdersByNumber(table.table_number);
+                      const tableTotal = getTableTotalByNumber(table.table_number);
+                      const hasOrders = tableOrders.length > 0;
+                      return (
+                        <Card
+                          key={table.id}
+                          className={`cursor-pointer transition-smooth hover:shadow-elegant ${
+                            selectedTableId === table.id ? "ring-2 ring-primary" : ""
+                          }`}
+                          onClick={() => setSelectedTableId(table.id)}
+                        >
+                          <CardContent className="p-4 text-center">
+                            <div className="text-lg font-bold mb-2">Table {table.table_number}</div>
+                            <Badge
+                              className={`mb-2 ${
+                                hasOrders
+                                  ? "bg-destructive text-destructive-foreground"
+                                  : "bg-success text-success-foreground"
+                              }`}
+                            >
+                              {hasOrders ? "In Progress" : (table.status ?? "Available")}
+                            </Badge>
+                            {hasOrders && (
+                              <div className="text-sm">
+                                <p className="font-medium">${tableTotal.toFixed(2)}</p>
+                                <p className="text-muted-foreground">{tableOrders.length} order(s)</p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
                 </div>
               </CardContent>
             </Card>
@@ -800,6 +811,18 @@ export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
                               </div>
                             ))}
                           </div>
+
+                          {/* Cancel Order Button */}
+                          {order.status !== "cancelled" && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => cancelOrder(order.id)}
+                              className="mb-2"
+                            >
+                              <XCircle className="w-4 h-4 mr-2" /> Cancel Order
+                            </Button>
+                          )}
                         </CardContent>
                       </Card>
                     ))}
@@ -861,5 +884,4 @@ export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
     </div>
   );
 };
-
 

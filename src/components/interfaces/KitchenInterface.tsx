@@ -1,6 +1,6 @@
 // // src/components/kitchen/KitchenInterface.tsx
 // import { useEffect, useState } from "react";
-// import { collection, doc, onSnapshot, orderBy, query, Timestamp, updateDoc } from "firebase/firestore";
+// import { collection, doc, onSnapshot, orderBy, query, Timestamp, updateDoc, deleteDoc } from "firebase/firestore";
 // import { db } from "@/lib/firebase";
 // import { Button } from "@/components/ui/button";
 // import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,14 +8,13 @@
 // import { Separator } from "@/components/ui/separator";
 // import { CheckCircle, X, Clock, ChefHat, ArrowLeft } from "lucide-react";
 // import { useToast } from "@/hooks/use-toast";
-// import { deleteDoc } from "firebase/firestore";
 
 // interface OrderItem {
 //   item_id: string;
 //   name: string;
 //   quantity: number;
 //   price_per_item: number;
-//   note?: string; // <-- per-item note from Firestore
+//   note?: string;
 // }
 
 // interface Order {
@@ -24,10 +23,10 @@
 //   customer_name: string | null;
 //   total_amount: number;
 //   status: "pending" | "accepted" | "preparing" | "ready" | "completed" | "cancelled";
-//   created_at: Timestamp;
-//   updated_at?: Timestamp;
+//   created_at: any;
+//   updated_at?: any;
 //   items: OrderItem[];
-//   note?: string; // optional order-level note if you ever use it
+//   note?: string;
 // }
 
 // interface KitchenInterfaceProps {
@@ -42,7 +41,7 @@
 
 //   useEffect(() => {
 //     setLoading(true);
-//     const q = query(collection(db, "orders"), orderBy("created_at", "desc")); // newest first
+//     const q = query(collection(db, "orders"), orderBy("created_at", "desc"));
 //     const unsub = onSnapshot(
 //       q,
 //       (snapshot) => {
@@ -192,7 +191,7 @@
 //                         Table {order.table_number} - {order.customer_name || "Guest"}
 //                       </h3>
 //                       <p className="text-sm text-muted-foreground">
-//                         {order.created_at?.toDate ? order.created_at.toDate().toLocaleTimeString() : ""}
+//                         {order.created_at?.toDate ? order.created_at.toDate().toLocaleTimeString() : (order.created_at instanceof Date ? order.created_at.toLocaleTimeString() : "")}
 //                       </p>
 //                     </div>
 //                     <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
@@ -267,21 +266,21 @@
 //                         <span className="text-success font-medium">Order Ready for Pickup</span>
 
 //                         <Button
-//       size="sm"
-//       variant="destructive"
-//       onClick={async () => {
-//         try {
-//           await deleteDoc(doc(db, "orders", order.id));
-//           toast({ title: "Order Deleted", description: "The order has been removed." });
-//         } catch (err) {
-//           console.error("Failed to delete order:", err);
-//           toast({ title: "Error", description: "Failed to delete order", variant: "destructive" });
-//         }
-//       }}
-//       className="ml-2 w-6 h-6 p-0 flex items-center justify-center"
-//     >
-//       <X className="w-3 h-3" />
-//     </Button>
+//                           size="sm"
+//                           variant="destructive"
+//                           onClick={async () => {
+//                             try {
+//                               await deleteDoc(doc(db, "orders", order.id));
+//                               toast({ title: "Order Deleted", description: "The order has been removed." });
+//                             } catch (err) {
+//                               console.error("Failed to delete order:", err);
+//                               toast({ title: "Error", description: "Failed to delete order", variant: "destructive" });
+//                             }
+//                           }}
+//                           className="ml-2 w-6 h-6 p-0 flex items-center justify-center"
+//                         >
+//                           <X className="w-3 h-3" />
+//                         </Button>
 //                       </div>
 //                     )}
 //                   </div>
@@ -305,10 +304,10 @@
 
 // src/components/kitchen/KitchenInterface.tsx
 import { useEffect, useState } from "react";
-import { collection, doc, onSnapshot, orderBy, query, Timestamp, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot, orderBy, query, Timestamp, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { CheckCircle, X, Clock, ChefHat, ArrowLeft } from "lucide-react";
@@ -389,7 +388,12 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
     }
   };
 
-  const filteredOrders = orders.filter((o) => {
+  // Hide cancelled and completed orders in kitchen view
+  const activeOrders = orders.filter(
+    (o) => o.status !== "cancelled" && o.status !== "completed"
+  );
+
+  const filteredOrders = activeOrders.filter((o) => {
     if (filter === "All") return true;
     if (filter === "Pending") return o.status === "pending";
     if (filter === "In Progress") return o.status === "accepted" || o.status === "preparing";
@@ -397,11 +401,10 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
     return true;
   });
 
-  // Counters
-  const pendingCount = orders.filter((o) => o.status === "pending").length;
-  const inProgressCount = orders.filter((o) => o.status === "accepted" || o.status === "preparing").length;
-  const readyCount = orders.filter((o) => o.status === "ready").length;
-  const rejectedCount = orders.filter((o) => o.status === "cancelled").length;
+  // Counters (only active orders count)
+  const pendingCount = activeOrders.filter((o) => o.status === "pending").length;
+  const inProgressCount = activeOrders.filter((o) => o.status === "accepted" || o.status === "preparing").length;
+  const readyCount = activeOrders.filter((o) => o.status === "ready").length;
 
   if (loading) {
     return (
@@ -429,13 +432,13 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
           </div>
           <div className="text-right">
             <p className="text-sm text-muted-foreground">Active Orders</p>
-            <p className="text-2xl font-bold text-primary">{orders.length}</p>
+            <p className="text-2xl font-bold text-primary">{activeOrders.length}</p>
           </div>
         </div>
       </header>
 
-      {/* Status counters with left color bars */}
-      <div className="container mx-auto px-4 py-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Status counters */}
+      <div className="container mx-auto px-4 py-4 grid grid-cols-2 md:grid-cols-3 gap-4">
         <div className="p-4 bg-card rounded-lg shadow-sm flex items-center">
           <span className="w-2 h-12 mr-3 bg-yellow-500 rounded"></span>
           <div className="text-center flex-1">
@@ -457,14 +460,6 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
           <div className="text-center flex-1">
             <p className="text-sm text-muted-foreground">Ready</p>
             <p className="text-xl font-bold">{readyCount}</p>
-          </div>
-        </div>
-
-        <div className="p-4 bg-card rounded-lg shadow-sm flex items-center">
-          <span className="w-2 h-12 mr-3 bg-red-500 rounded"></span>
-          <div className="text-center flex-1">
-            <p className="text-sm text-muted-foreground">Rejected</p>
-            <p className="text-xl font-bold">{rejectedCount}</p>
           </div>
         </div>
       </div>
@@ -496,20 +491,18 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
                         Table {order.table_number} - {order.customer_name || "Guest"}
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        {order.created_at?.toDate ? order.created_at.toDate().toLocaleTimeString() : (order.created_at instanceof Date ? order.created_at.toLocaleTimeString() : "")}
+                        {order.created_at?.toDate ? order.created_at.toDate().toLocaleTimeString() : ""}
                       </p>
                     </div>
                     <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
                   </div>
 
-                  {/* Items + per-item notes */}
+                  {/* Items */}
                   <div className="space-y-3 mb-4">
                     {(order.items || []).map((item, idx) => (
                       <div key={idx} className="flex flex-col">
                         <div className="flex justify-between">
-                          <span className="text-sm">
-                            {item.name} x{item.quantity}
-                          </span>
+                          <span className="text-sm">{item.name} x{item.quantity}</span>
                           <span className="text-sm text-muted-foreground">
                             ${(item.price_per_item * item.quantity).toFixed(2)}
                           </span>
@@ -523,7 +516,6 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
                     ))}
                   </div>
 
-                  {/* Optional order-level note if present */}
                   {order.note && (
                     <div className="mb-4 p-3 bg-muted rounded-lg">
                       <p className="text-sm text-muted-foreground">Order Note:</p>
@@ -538,11 +530,12 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
                     <span className="font-bold text-primary">${order.total_amount.toFixed(2)}</span>
                   </div>
 
+                  {/* Actions */}
                   <div className="flex gap-2">
                     {order.status === "pending" && (
                       <>
                         <Button className="flex-1" onClick={() => updateOrderStatus(order.id, "accepted")}>
-                          <CheckCircle className="w-4 h-4 mr-2" /> Accept Order
+                          <CheckCircle className="w-4 h-4 mr-2" /> Accept
                         </Button>
                         <Button
                           variant="destructive"
@@ -562,30 +555,13 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
 
                     {order.status === "preparing" && (
                       <Button variant="success" className="w-full" onClick={() => updateOrderStatus(order.id, "ready")}>
-                        <CheckCircle className="w-4 h-4 mr-2" /> Mark as Ready
+                        <CheckCircle className="w-4 h-4 mr-2" /> Mark Ready
                       </Button>
                     )}
 
                     {order.status === "ready" && (
                       <div className="w-full text-center p-2 bg-success/10 rounded-lg">
-                        <span className="text-success font-medium">Order Ready for Pickup</span>
-
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={async () => {
-                            try {
-                              await deleteDoc(doc(db, "orders", order.id));
-                              toast({ title: "Order Deleted", description: "The order has been removed." });
-                            } catch (err) {
-                              console.error("Failed to delete order:", err);
-                              toast({ title: "Error", description: "Failed to delete order", variant: "destructive" });
-                            }
-                          }}
-                          className="ml-2 w-6 h-6 p-0 flex items-center justify-center"
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
+                        <span className="text-success font-medium">Order Ready</span>
                       </div>
                     )}
                   </div>
