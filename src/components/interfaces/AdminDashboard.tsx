@@ -60,6 +60,22 @@ const [tableSearch, setTableSearch] = useState<string>("");
 
 
 
+const itemsPerPage = 4;
+const [itemPage, setItemPage] = useState(1);
+const [categoryPage, setCategoryPage] = useState(1);
+const [tablePage, setTablePage] = useState(1);
+
+
+
+// ---------- Pagination helpers ----------
+const paginate = (array: any[], page: number) => {
+  const start = (page - 1) * itemsPerPage;
+  return array.slice(start, start + itemsPerPage);
+};
+
+const pageCount = (array: any[]) => Math.ceil(array.length / itemsPerPage);
+
+
   // ---------- helpers ----------
   async function uploadImageIfAny(file?: File | null): Promise<string> {
     if (!file) return "";
@@ -397,34 +413,44 @@ const pastDayRevenue = pastDayOrders
 
 
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {menuItems.filter(item => item.name.toLowerCase().includes(itemSearch.toLowerCase()))
-                    .map((item) => (
-                      <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex-1">
-                          <p className="font-medium">{item.name}</p>
-                          <p className="text-sm text-muted-foreground">{item.description}</p>
-                          <p className="text-sm font-medium text-primary">${item.price.toFixed(2)} • {item.category}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditingItemId(item.id);
-                              setItemForm({
-                                name: item.name,
-                                description: item.description,
-                                price: item.price,
-                                category: item.category,
-                                image_url: item.image_url || "",
-                                image_file: null,
-                              });
-                            }}
-                          ><Edit className="w-4 h-4" /></Button>
-                          <Button size="sm" variant="outline" onClick={() => deleteItem(item.id)}><Trash2 className="w-4 h-4" /></Button>
-                        </div>
-                      </div>
-                    ))}
+                    {paginate(menuItems.filter(item => item.name.toLowerCase().includes(itemSearch.toLowerCase())), itemPage)
+  .map((item) => (
+    <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
+      <div className="flex-1">
+        <p className="font-medium">{item.name}</p>
+        <p className="text-sm text-muted-foreground">{item.description}</p>
+        <p className="text-sm font-medium text-primary">${item.price.toFixed(2)} • {item.category}</p>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            setEditingItemId(item.id);
+            setItemForm({
+              name: item.name,
+              description: item.description,
+              price: item.price,
+              category: item.category,
+              image_url: item.image_url || "",
+              image_file: null,
+            });
+          }}
+        ><Edit className="w-4 h-4" /></Button>
+        <Button size="sm" variant="outline" onClick={() => deleteItem(item.id)}><Trash2 className="w-4 h-4" /></Button>
+      </div>
+    </div>
+  ))}
+
+{/* Pagination Controls */}
+{pageCount(menuItems.filter(item => item.name.toLowerCase().includes(itemSearch.toLowerCase()))) > 1 && (
+  <div className="flex justify-center gap-2 mt-3">
+    {Array.from({ length: pageCount(menuItems.filter(item => item.name.toLowerCase().includes(itemSearch.toLowerCase()))) }, (_, i) => (
+      <Button key={i} size="sm" variant={itemPage === i + 1 ? "default" : "outline"} onClick={() => setItemPage(i + 1)}>{i + 1}</Button>
+    ))}
+  </div>
+)}
+
                   </div>
                 </CardContent>
               </Card>
@@ -473,21 +499,31 @@ const pastDayRevenue = pastDayOrders
 
 
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {categories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()))
-                    .map((c) => (
-                      <div key={c.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex-1">
-                          <p className="font-medium">{c.name}</p>
-                          <p className="text-sm text-muted-foreground">{c.description}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline" onClick={() => { setEditingCategoryId(c.id); setCategoryForm({ name: c.name, description: c.description || "" }); }}>
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => deleteCategory(c.id)}><Trash2 className="w-4 h-4" /></Button>
-                        </div>
-                      </div>
-                    ))}
+                   {paginate(categories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase())), categoryPage)
+  .map((c) => (
+    <div key={c.id} className="flex items-center justify-between p-3 border rounded-lg">
+      <div className="flex-1">
+        <p className="font-medium">{c.name}</p>
+        <p className="text-sm text-muted-foreground">{c.description}</p>
+      </div>
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" onClick={() => { setEditingCategoryId(c.id); setCategoryForm({ name: c.name, description: c.description || "" }); }}>
+          <Edit className="w-4 h-4" />
+        </Button>
+        <Button size="sm" variant="outline" onClick={() => deleteCategory(c.id)}><Trash2 className="w-4 h-4" /></Button>
+      </div>
+    </div>
+  ))}
+
+{/* Pagination Controls */}
+{pageCount(categories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()))) > 1 && (
+  <div className="flex justify-center gap-2 mt-3">
+    {Array.from({ length: pageCount(categories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()))) }, (_, i) => (
+      <Button key={i} size="sm" variant={categoryPage === i + 1 ? "default" : "outline"} onClick={() => setCategoryPage(i + 1)}>{i + 1}</Button>
+    ))}
+  </div>
+)}
+
                   </div>
                 </CardContent>
               </Card>
@@ -509,7 +545,7 @@ const pastDayRevenue = pastDayOrders
                       id="table-number"
                       type="number"
                       value={tableForm.table_number}
-                      onChange={(e) => setTableForm({ ...tableForm, table_number: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => setTableForm({ ...tableForm, table_number: parseInt(e.target.value) })}
                       placeholder="Table number"
                     />
                   </div>
@@ -541,10 +577,13 @@ const pastDayRevenue = pastDayOrders
     </div>
 
                   <RealtimeTables
-                    onEdit={(id, n) => { setEditingTableId(id); setTableForm({ table_number: n }); }}
-                    onDelete={(id) => deleteTable(id)}
-                    onGenerateQR={(n) => generateAndDownloadTableQR(n)}
-                    searchFilter={tableSearch}
+                   onEdit={(id, n) => { setEditingTableId(id); setTableForm({ table_number: n }); }}
+  onDelete={(id) => deleteTable(id)}
+  onGenerateQR={(n) => generateAndDownloadTableQR(n)}
+  searchFilter={tableSearch}
+  currentPage={tablePage}
+  setPage={setTablePage}
+  itemsPerPage={itemsPerPage}
       
                   />
                 </CardContent>
@@ -664,21 +703,30 @@ function RealtimeTables({
   onDelete,
   onGenerateQR,
   searchFilter,
+  currentPage,
+  setPage,
+  itemsPerPage
 }: {
   onEdit: (id: string, n: number) => void;
   onDelete: (id: string) => void;
   onGenerateQR: (tableNumber: number) => void;
   searchFilter: string;
+  currentPage: number;
+  setPage: (p: number) => void;
+  itemsPerPage: number;
 }) {
   const { tables } = useMenu();
 
   const filteredTables = tables.filter(t =>
-  (`Table ${t.table_number}`).toLowerCase().includes(searchFilter.toLowerCase())
-);
+    (`Table ${t.table_number}`).toLowerCase().includes(searchFilter.toLowerCase())
+  );
+
+  const pageCount = Math.ceil(filteredTables.length / itemsPerPage);
+  const paginatedTables = filteredTables.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
-    <div className="space-y-3 max-h-96 overflow-y-auto">
-      {filteredTables.map((t) => (
+    <div className="space-y-3">
+      {paginatedTables.map((t) => (
         <div key={t.id} className="flex items-center justify-between p-3 border rounded-lg">
           <div className="flex-1"><p className="font-medium">Table {t.table_number}</p></div>
           <div className="flex gap-2">
@@ -690,9 +738,19 @@ function RealtimeTables({
           </div>
         </div>
       ))}
+
+      {/* Pagination Controls */}
+      {pageCount > 1 && (
+        <div className="flex justify-center gap-2 mt-3">
+          {Array.from({ length: pageCount }, (_, i) => (
+            <Button key={i} size="sm" variant={currentPage === i + 1 ? "default" : "outline"} onClick={() => setPage(i + 1)}>{i + 1}</Button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
 
 
 
