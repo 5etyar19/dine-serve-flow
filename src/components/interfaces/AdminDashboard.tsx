@@ -52,6 +52,14 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [pastDay, setPastDay] = useState<string>(new Date().toISOString().split("T")[0]); // YYYY-MM-DD
   const [pastDayOrders, setPastDayOrders] = useState<OrderAnalytics[]>([]);
 
+
+
+const [itemSearch, setItemSearch] = useState("");
+const [categorySearch, setCategorySearch] = useState("");
+const [tableSearch, setTableSearch] = useState<string>("");
+
+
+
   // ---------- helpers ----------
   async function uploadImageIfAny(file?: File | null): Promise<string> {
     if (!file) return "";
@@ -242,6 +250,13 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     setPastDayOrders(filtered);
   }, [pastDay, orders]);
 
+
+  // ---------- Past day revenue ----------
+const pastDayRevenue = pastDayOrders
+  .filter(o => o.status === "completed")
+  .reduce((sum, o) => sum + (o.total_amount || 0), 0);
+
+
   // Analytics derived
   const totalRevenue = orders
     .filter((o) => o.status === "completed")
@@ -313,6 +328,9 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5" />{editingItemId ? "Edit Item" : "Add New Item"}</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
+
+                  
+                  
                   <div><Label htmlFor="item-name">Name</Label>
                     <Input id="item-name" value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} placeholder="Item name" />
                   </div>
@@ -366,8 +384,21 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
               <Card>
                 <CardHeader><CardTitle>Menu Items ({menuItems.length})</CardTitle></CardHeader>
                 <CardContent>
+                
+                {/* Search bar */}
+    <div className="mb-3">
+      <Input
+        placeholder="Search items..."
+        value={itemSearch}
+        onChange={(e) => setItemSearch(e.target.value)}
+      />
+    </div>
+
+
+
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {menuItems.map((item) => (
+                    {menuItems.filter(item => item.name.toLowerCase().includes(itemSearch.toLowerCase()))
+                    .map((item) => (
                       <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
                         <div className="flex-1">
                           <p className="font-medium">{item.name}</p>
@@ -428,8 +459,22 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
               <Card>
                 <CardHeader><CardTitle>Categories ({categories.length})</CardTitle></CardHeader>
                 <CardContent>
+                  {/* Search bar */}
+    <div className="mb-3">
+      <Input
+        placeholder="Search categories..."
+        value={categorySearch}
+        onChange={(e) => setCategorySearch(e.target.value)}
+      />
+    </div>
+
+
+
+
+
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {categories.map((c) => (
+                    {categories.filter(c => c.name.toLowerCase().includes(categorySearch.toLowerCase()))
+                    .map((c) => (
                       <div key={c.id} className="flex items-center justify-between p-3 border rounded-lg">
                         <div className="flex-1">
                           <p className="font-medium">{c.name}</p>
@@ -455,6 +500,10 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5" />{editingTableId ? "Edit Table" : "Add New Table"}</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
+                  
+
+
+
                   <div><Label htmlFor="table-number">Table Number</Label>
                     <Input
                       id="table-number"
@@ -481,10 +530,22 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
               <Card>
                 <CardHeader><CardTitle>Tables</CardTitle></CardHeader>
                 <CardContent>
+
+                    <div className="mb-3">
+      <Input
+        id="table-search"
+    placeholder="Search table..."
+    value={tableSearch}
+    onChange={(e) => setTableSearch(e.target.value)}
+      />
+    </div>
+
                   <RealtimeTables
                     onEdit={(id, n) => { setEditingTableId(id); setTableForm({ table_number: n }); }}
                     onDelete={(id) => deleteTable(id)}
-                    onGenerateQR={(n) => generateAndDownloadTableQR(n /* , true to also upload */)}
+                    onGenerateQR={(n) => generateAndDownloadTableQR(n)}
+                    searchFilter={tableSearch}
+      
                   />
                 </CardContent>
               </Card>
@@ -555,6 +616,8 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             <Card>
               <CardHeader><CardTitle>Past Days Orders</CardTitle></CardHeader>
               <CardContent className="space-y-4">
+
+                
                 <div className="mb-4">
                   <Label htmlFor="past-day">Select Date</Label>
                   <Input
@@ -564,6 +627,13 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
                     onChange={(e) => setPastDay(e.target.value)}
                   />
                 </div>
+
+                
+
+              <div className="mb-4">
+              <p className="font-medium">Total Revenue for {pastDay}: <span className="text-green-600 font-bold">${pastDayRevenue.toFixed(2)}</span></p>
+              </div>
+
                 <div className="space-y-3">
                   {pastDayOrders.length > 0 ? pastDayOrders.map((o) => (
                     <div key={o.id} className="flex justify-between items-center border rounded p-3">
@@ -593,15 +663,22 @@ function RealtimeTables({
   onEdit,
   onDelete,
   onGenerateQR,
+  searchFilter,
 }: {
   onEdit: (id: string, n: number) => void;
   onDelete: (id: string) => void;
   onGenerateQR: (tableNumber: number) => void;
+  searchFilter: string;
 }) {
   const { tables } = useMenu();
+
+  const filteredTables = tables.filter(t =>
+  (`Table ${t.table_number}`).toLowerCase().includes(searchFilter.toLowerCase())
+);
+
   return (
     <div className="space-y-3 max-h-96 overflow-y-auto">
-      {tables.map((t) => (
+      {filteredTables.map((t) => (
         <div key={t.id} className="flex items-center justify-between p-3 border rounded-lg">
           <div className="flex-1"><p className="font-medium">Table {t.table_number}</p></div>
           <div className="flex gap-2">
@@ -616,6 +693,7 @@ function RealtimeTables({
     </div>
   );
 }
+
 
 
 
