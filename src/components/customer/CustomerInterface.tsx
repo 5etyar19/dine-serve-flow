@@ -46,14 +46,12 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
     const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.sin(dLat / 2) ** 2 +
       Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const d = R * c;
-    return d;
+    return R * c;
   }
 
   useEffect(() => {
@@ -91,14 +89,10 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
 
   const handleQuantityChange = (id: string, quantity: number) => {
     const item = itemsToShow.find((i) => i.id === id);
-    if (!item) return;
-
-    // Prevent changes if item is unavailable
-    if (item.is_available === false) return;
-
+    if (!item || item.is_available === false) return;
     setCart((prev) => {
       const existing = prev.find((x) => x.id === id);
-      if (quantity === 0) return prev.filter((x) => x.id !== id);
+      if (quantity <= 0) return prev.filter((x) => x.id !== id);
       if (existing) return prev.map((x) => (x.id === id ? { ...x, quantity } : x));
       return [...prev, { id, name: item.name, price: item.price, quantity, note: "" }];
     });
@@ -168,6 +162,99 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
       ? itemsToShow
       : itemsToShow.filter((item) => item.category === activeCategory);
 
+  // --- CART VIEW ---
+  if (showCart) {
+    return (
+      <div className="min-h-screen bg-gradient-subtle">
+        <header className="bg-card border-b shadow-soft sticky top-0 z-10">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button variant="outline" onClick={() => setShowCart(false)}>
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Back to Menu
+                </Button>
+                <div>
+                  <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">Your Cart</h1>
+                  <p className="text-muted-foreground text-sm">Review your order</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="container mx-auto px-4 py-6">
+          <div className="max-w-2xl mx-auto">
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="w-5 h-5" /> Customer Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Input
+                  placeholder="Enter your name (optional)"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5" /> Order Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6 mb-6">
+                  {cart.map((item) => (
+                    <div key={item.id} className="p-4 border-2 border-gray-300 rounded-lg space-y-3">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h3 className="font-semibold">{item.name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            ${item.price.toFixed(2)} × {item.quantity}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="icon" onClick={() => handleQuantityChange(item.id, item.quantity - 1)}>
+                            <Minus className="w-4 h-4" />
+                          </Button>
+                          <span>{item.quantity}</span>
+                          <Button variant="outline" size="icon" onClick={() => handleQuantityChange(item.id, item.quantity + 1)}>
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <Textarea
+                        placeholder="Add a note (optional)"
+                        value={item.note || ""}
+                        onChange={(e) => handleNoteChange(item.id, e.target.value)}
+                      />
+                      <div className="text-right">
+                        <p className="font-bold">${(item.price * item.quantity).toFixed(2)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Separator className="my-4" />
+                <div className="flex justify-between items-center mb-6">
+                  <span className="text-xl font-bold">Total:</span>
+                  <span className="text-xl font-bold text-primary">${getTotalPrice().toFixed(2)}</span>
+                </div>
+                <Button variant="hero" className="w-full" size="lg" onClick={placeOrder} disabled={placing}>
+                  {placing ? "Placing Order..." : "Place Order"}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- MAIN MENU VIEW ---
   return (
     <div className="min-h-screen bg-gradient-subtle">
       <header className="bg-card border-b shadow-soft sticky top-0 z-10">
@@ -207,20 +294,26 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-          {filteredMenu.map((item: any) => (
-            <MenuCard
-              key={item.id}
-              id={item.id}
-              name={item.name}
-              description={item.description}
-              price={item.price}
-              image={item.image || undefined}
-              category={item.category}
-              quantity={getCartQuantity(item.id)}
-              onQuantityChange={handleQuantityChange}
-              disabled={item.is_available === false} // prevents interaction
-            />
-          ))}
+          {filteredMenu.length > 0 ? (
+            filteredMenu.map((item: any) => (
+              <MenuCard
+                key={item.id}
+                id={item.id}
+                name={item.name}
+                description={item.description}
+                price={item.price}
+                image={item.image || undefined}
+                category={item.category}
+                quantity={getCartQuantity(item.id)}
+                onQuantityChange={handleQuantityChange}
+                disabled={item.is_available === false}
+              />
+            ))
+          ) : (
+            <p className="col-span-full text-center text-muted-foreground">
+              No items in this category.
+            </p>
+          )}
         </div>
 
         {cart.length > 0 && (
@@ -252,6 +345,3 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
     </div>
   );
 };
-
-
-
