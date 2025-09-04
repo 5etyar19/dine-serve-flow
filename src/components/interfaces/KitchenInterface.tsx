@@ -716,7 +716,6 @@ interface OrderItem {
   item_id: string;
   name: string;
   quantity: number;
-  price_per_item: number;
   note?: string;
 }
 
@@ -724,7 +723,6 @@ interface Order {
   id: string;
   table_number: number;
   customer_name: string | null;
-  total_amount: number;
   status: "pending" | "accepted" | "preparing" | "ready" | "completed" | "cancelled";
   created_at: any;
   updated_at?: any;
@@ -1004,9 +1002,7 @@ if (manageMenuMode) {
                       <div key={idx} className="flex flex-col">
                         <div className="flex justify-between">
                           <span className="text-sm">{item.name} x{item.quantity}</span>
-                          <span className="text-sm text-muted-foreground">
-                            ${(item.price_per_item * item.quantity).toFixed(2)}
-                          </span>
+                          
                         </div>
                         {item.note && (
                           <div className="mt-1 pl-3 border-l text-xs italic text-muted-foreground">
@@ -1026,10 +1022,7 @@ if (manageMenuMode) {
 
                   <Separator className="my-4" />
 
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="font-semibold">Total:</span>
-                    <span className="font-bold text-primary">${order.total_amount.toFixed(2)}</span>
-                  </div>
+                  
 
                   {/* Actions */}
                   <div className="flex gap-2">
