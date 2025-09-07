@@ -83,6 +83,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   // Session tracking (persisted)
   const [currentDayKey, setCurrentDayKey] = useState<string>("");         // empty until loaded
   const [sessionStart, setSessionStart] = useState<Date | null>(null);    // null until loaded
+  const [sessionReady, setSessionReady] = useState(false);
 
   // Search & pagination
   const [itemSearch, setItemSearch] = useState("");
@@ -293,38 +294,33 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   // ---------- Persisted session: ensure doc exists once, then subscribe ----------
   useEffect(() => {
     let unsub: (() => void) | null = null;
-
     (async () => {
       const settingsRef = doc(db, "settings", "current_day");
       const snap = await getDoc(settingsRef);
-
       if (!snap.exists()) {
-        // First-time init only
         const now = new Date();
-        await setDoc(settingsRef, {
-          day_key: toDayKey(now),
-          started_at: Timestamp.fromDate(now),
-        });
+        await setDoc(settingsRef, { day_key: toDayKey(now), started_at: nowTs() });
       }
-
       unsub = onSnapshot(settingsRef, (s) => {
         if (s.exists()) {
           const data = s.data() as any;
           setCurrentDayKey(data.day_key);
           setSessionStart(toDate(data.started_at));
+          setSessionReady(true);
+        } else {
+          setSessionReady(true);
         }
       });
     })();
-
     return () => { if (unsub) unsub(); };
   }, []);
 
   // ---------- Derived: Orders in Session ----------
-  const effectiveSessionStart = sessionStart ?? new Date(0); // guard until loaded
-  const ordersInSession = useMemo(
-    () => orders.filter(o => toDate(o.created_at) >= effectiveSessionStart),
-    [orders, effectiveSessionStart]
-  );
+  const ordersInSession = useMemo(() => {
+  if (!sessionReady || !sessionStart) return [];
+  return orders.filter(o => toDate(o.created_at) >= sessionStart);
+}, [orders, sessionStart, sessionReady]);
+
 
   // ---------- Past Days tab: listen to day totals & mirrored orders ----------
   useEffect(() => {
@@ -402,84 +398,74 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
   // ---------- End Day ----------
   async function endDay() {
-  try {
-    if (!sessionStart) return;
+    try {
+      if (!sessionStart) return;
 
-    // Snapshot current session orders
-    const sessionOrders = orders.filter(o => toDate(o.created_at) >= sessionStart);
+      // orders in the current session boundary
+      const sessionOrders = orders.filter(o => toDate(o.created_at) >= sessionStart);
 
-    // Aggregate status counts and revenue for this session
-    const statusCounts: Record<string, number> = {
-      pending: 0, accepted: 0, preparing: 0, ready: 0, completed: 0, cancelled: 0
-    };
-    let revenueCompleted = 0;
-    for (const o of sessionOrders) {
-      statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
-      if (o.status === "completed") revenueCompleted += o.total_amount || 0;
-    }
+      // aggregate this session
+      const statusCounts: Record<string, number> =
+        { pending:0, accepted:0, preparing:0, ready:0, completed:0, cancelled:0 };
+      let revenueCompleted = 0;
+      for (const o of sessionOrders) {
+        statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
+        if (o.status === "completed") revenueCompleted += o.total_amount || 0;
+      }
 
-    const dayKey = toDayKey(sessionStart);
-    const dayRef = doc(db, "past_days", dayKey);
+      const dayKey = toDayKey(sessionStart);
+      const dayRef = doc(db, "past_days", dayKey);
 
-    // --- ACCUMULATE totals atomically (no overwrite) ---
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(dayRef);
-      const existing = snap.exists() ? (snap.data() as any) : null;
+      // accumulate totals atomically
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(dayRef);
+        const existing = snap.exists() ? (snap.data() as any) : null;
+        const prev = existing?.totals || {
+          total_orders: 0,
+          revenue_completed: 0,
+          status_counts: { pending:0, accepted:0, preparing:0, ready:0, completed:0, cancelled:0 }
+        };
 
-      const prevTotals = existing?.totals || {
-        total_orders: 0,
-        revenue_completed: 0,
-        status_counts: {
-          pending: 0, accepted: 0, preparing: 0, ready: 0, completed: 0, cancelled: 0
-        }
-      };
+        const totals = {
+          total_orders: (prev.total_orders || 0) + sessionOrders.length,
+          revenue_completed: Number(((prev.revenue_completed || 0) + revenueCompleted).toFixed(2)),
+          status_counts: {
+            pending:   (prev.status_counts?.pending   || 0) + (statusCounts.pending   || 0),
+            accepted:  (prev.status_counts?.accepted  || 0) + (statusCounts.accepted  || 0),
+            preparing: (prev.status_counts?.preparing || 0) + (statusCounts.preparing || 0),
+            ready:     (prev.status_counts?.ready     || 0) + (statusCounts.ready     || 0),
+            completed: (prev.status_counts?.completed || 0) + (statusCounts.completed || 0),
+            cancelled: (prev.status_counts?.cancelled || 0) + (statusCounts.cancelled || 0),
+          }
+        };
 
-      const newTotals = {
-        total_orders: (prevTotals.total_orders || 0) + sessionOrders.length,
-        revenue_completed: Number(((prevTotals.revenue_completed || 0) + revenueCompleted).toFixed(2)),
-        status_counts: {
-          pending:   (prevTotals.status_counts?.pending   || 0) + (statusCounts.pending   || 0),
-          accepted:  (prevTotals.status_counts?.accepted  || 0) + (statusCounts.accepted  || 0),
-          preparing: (prevTotals.status_counts?.preparing || 0) + (statusCounts.preparing || 0),
-          ready:     (prevTotals.status_counts?.ready     || 0) + (statusCounts.ready     || 0),
-          completed: (prevTotals.status_counts?.completed || 0) + (statusCounts.completed || 0),
-          cancelled: (prevTotals.status_counts?.cancelled || 0) + (statusCounts.cancelled || 0),
-        }
-      };
+        const started_at = existing?.started_at ?? Timestamp.fromDate(sessionStart);
 
-      // Keep the earliest started_at; always bump ended_at
-      const started_at = existing?.started_at ?? Timestamp.fromDate(sessionStart);
+        tx.set(dayRef, { timezone: TZ, started_at, ended_at: nowTs(), totals }, { merge: true });
+      });
 
-      tx.set(dayRef, {
-        timezone: TZ,
-        started_at,
-        ended_at: nowTs(),
-        totals: newTotals,
+      // mirror orders (idempotent)
+      const batch = writeBatch(db);
+      for (const o of sessionOrders) {
+        const oref = doc(collection(dayRef, "orders"), o.id);
+        batch.set(oref, { ...o, day_key: dayKey }, { merge: true });
+      }
+      await batch.commit();
+
+      // rotate session boundary using SERVER time; do NOT set local Date
+      const nextLocal = new Date(); // only for day_key label
+      await setDoc(doc(db, "settings", "current_day"), {
+        day_key: toDayKey(nextLocal),
+        started_at: nowTs(), // SERVER timestamp
       }, { merge: true });
-    });
 
-    // Mirror session orders into subcollection (idempotent—same id overwrites the same doc)
-    const batch = writeBatch(db);
-    for (const o of sessionOrders) {
-      const oref = doc(collection(dayRef, "orders"), o.id);
-      batch.set(oref, { ...o, day_key: dayKey }, { merge: true });
+      // Let the onSnapshot update sessionStart; no local override
+      toast({ title: "Day closed", description: `Archived ${sessionOrders.length} orders to ${dayKey}.` });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "End Day failed", description: "Please try again.", variant: "destructive" });
     }
-    await batch.commit();
-
-    // Rotate session start to now (new session starts immediately)
-    const nextStart = new Date();
-    await setDoc(doc(db, "settings", "current_day"), {
-      day_key: toDayKey(nextStart),
-      started_at: Timestamp.fromDate(nextStart)
-    }, { merge: true });
-
-    setSessionStart(nextStart);
-    toast({ title: "Day closed", description: `Archived ${sessionOrders.length} orders to ${dayKey}.` });
-  } catch (e) {
-    console.error(e);
-    toast({ title: "End Day failed", description: "Please try again.", variant: "destructive" });
   }
-}
 
 
   return (
