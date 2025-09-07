@@ -21,6 +21,9 @@ import {
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import QRCode from "qrcode";
 
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+
+
 // ---------- Types ----------
 interface OrderAnalytics {
   id: string;
@@ -83,7 +86,6 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   // Session tracking (persisted)
   const [currentDayKey, setCurrentDayKey] = useState<string>("");         // empty until loaded
   const [sessionStart, setSessionStart] = useState<Date | null>(null);    // null until loaded
-  const [sessionReady, setSessionReady] = useState(false);
 
   // Search & pagination
   const [itemSearch, setItemSearch] = useState("");
@@ -93,6 +95,11 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [itemPage, setItemPage] = useState(1);
   const [categoryPage, setCategoryPage] = useState(1);
   const [tablePage, setTablePage] = useState(1);
+
+
+
+  const [selectedMonth, setSelectedMonth] = useState(""); // Add this near your existing useState calls
+
 
   // ---------- Pagination helpers ----------
   const paginate = (array: any[], page: number) => {
@@ -294,33 +301,38 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   // ---------- Persisted session: ensure doc exists once, then subscribe ----------
   useEffect(() => {
     let unsub: (() => void) | null = null;
+
     (async () => {
       const settingsRef = doc(db, "settings", "current_day");
       const snap = await getDoc(settingsRef);
+
       if (!snap.exists()) {
+        // First-time init only
         const now = new Date();
-        await setDoc(settingsRef, { day_key: toDayKey(now), started_at: nowTs() });
+        await setDoc(settingsRef, {
+          day_key: toDayKey(now),
+          started_at: Timestamp.fromDate(now),
+        });
       }
+
       unsub = onSnapshot(settingsRef, (s) => {
         if (s.exists()) {
           const data = s.data() as any;
           setCurrentDayKey(data.day_key);
           setSessionStart(toDate(data.started_at));
-          setSessionReady(true);
-        } else {
-          setSessionReady(true);
         }
       });
     })();
+
     return () => { if (unsub) unsub(); };
   }, []);
 
   // ---------- Derived: Orders in Session ----------
-  const ordersInSession = useMemo(() => {
-  if (!sessionReady || !sessionStart) return [];
-  return orders.filter(o => toDate(o.created_at) >= sessionStart);
-}, [orders, sessionStart, sessionReady]);
-
+  const effectiveSessionStart = sessionStart ?? new Date(0); // guard until loaded
+  const ordersInSession = useMemo(
+    () => orders.filter(o => toDate(o.created_at) >= effectiveSessionStart),
+    [orders, effectiveSessionStart]
+  );
 
   // ---------- Past Days tab: listen to day totals & mirrored orders ----------
   useEffect(() => {
@@ -372,6 +384,21 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     }, { pending: 0, accepted: 0, preparing: 0, ready: 0, completed: 0, cancelled: 0 } as any);
   }, [ordersInSession]);
 
+
+  // ---------- Computed metrics (add after sessionTotalRevenue) ----------
+const taxRate = 0.16; // 16% tax
+const sessionTotalTax = useMemo(
+  () => ordersInSession.filter(o => o.status === "completed")
+      .reduce((sum, o) => sum + (o.total_amount || 0) * taxRate, 0),
+  [ordersInSession]
+);
+
+const sessionRevenueAfterTax = useMemo(
+  () => sessionTotalRevenue - sessionTotalTax,
+  [sessionTotalRevenue, sessionTotalTax]
+);
+
+
   const completedInSession = sessionOrdersByStatus.completed || 0;
   const activeInSession = (sessionOrdersByStatus.pending || 0)
     + (sessionOrdersByStatus.accepted || 0)
@@ -398,74 +425,84 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
   // ---------- End Day ----------
   async function endDay() {
-    try {
-      if (!sessionStart) return;
+  try {
+    if (!sessionStart) return;
 
-      // orders in the current session boundary
-      const sessionOrders = orders.filter(o => toDate(o.created_at) >= sessionStart);
+    // Snapshot current session orders
+    const sessionOrders = orders.filter(o => toDate(o.created_at) >= sessionStart);
 
-      // aggregate this session
-      const statusCounts: Record<string, number> =
-        { pending:0, accepted:0, preparing:0, ready:0, completed:0, cancelled:0 };
-      let revenueCompleted = 0;
-      for (const o of sessionOrders) {
-        statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
-        if (o.status === "completed") revenueCompleted += o.total_amount || 0;
-      }
-
-      const dayKey = toDayKey(sessionStart);
-      const dayRef = doc(db, "past_days", dayKey);
-
-      // accumulate totals atomically
-      await runTransaction(db, async (tx) => {
-        const snap = await tx.get(dayRef);
-        const existing = snap.exists() ? (snap.data() as any) : null;
-        const prev = existing?.totals || {
-          total_orders: 0,
-          revenue_completed: 0,
-          status_counts: { pending:0, accepted:0, preparing:0, ready:0, completed:0, cancelled:0 }
-        };
-
-        const totals = {
-          total_orders: (prev.total_orders || 0) + sessionOrders.length,
-          revenue_completed: Number(((prev.revenue_completed || 0) + revenueCompleted).toFixed(2)),
-          status_counts: {
-            pending:   (prev.status_counts?.pending   || 0) + (statusCounts.pending   || 0),
-            accepted:  (prev.status_counts?.accepted  || 0) + (statusCounts.accepted  || 0),
-            preparing: (prev.status_counts?.preparing || 0) + (statusCounts.preparing || 0),
-            ready:     (prev.status_counts?.ready     || 0) + (statusCounts.ready     || 0),
-            completed: (prev.status_counts?.completed || 0) + (statusCounts.completed || 0),
-            cancelled: (prev.status_counts?.cancelled || 0) + (statusCounts.cancelled || 0),
-          }
-        };
-
-        const started_at = existing?.started_at ?? Timestamp.fromDate(sessionStart);
-
-        tx.set(dayRef, { timezone: TZ, started_at, ended_at: nowTs(), totals }, { merge: true });
-      });
-
-      // mirror orders (idempotent)
-      const batch = writeBatch(db);
-      for (const o of sessionOrders) {
-        const oref = doc(collection(dayRef, "orders"), o.id);
-        batch.set(oref, { ...o, day_key: dayKey }, { merge: true });
-      }
-      await batch.commit();
-
-      // rotate session boundary using SERVER time; do NOT set local Date
-      const nextLocal = new Date(); // only for day_key label
-      await setDoc(doc(db, "settings", "current_day"), {
-        day_key: toDayKey(nextLocal),
-        started_at: nowTs(), // SERVER timestamp
-      }, { merge: true });
-
-      // Let the onSnapshot update sessionStart; no local override
-      toast({ title: "Day closed", description: `Archived ${sessionOrders.length} orders to ${dayKey}.` });
-    } catch (e) {
-      console.error(e);
-      toast({ title: "End Day failed", description: "Please try again.", variant: "destructive" });
+    // Aggregate status counts and revenue for this session
+    const statusCounts: Record<string, number> = {
+      pending: 0, accepted: 0, preparing: 0, ready: 0, completed: 0, cancelled: 0
+    };
+    let revenueCompleted = 0;
+    for (const o of sessionOrders) {
+      statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
+      if (o.status === "completed") revenueCompleted += o.total_amount || 0;
     }
+
+    const dayKey = toDayKey(sessionStart);
+    const dayRef = doc(db, "past_days", dayKey);
+
+    // --- ACCUMULATE totals atomically (no overwrite) ---
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(dayRef);
+      const existing = snap.exists() ? (snap.data() as any) : null;
+
+      const prevTotals = existing?.totals || {
+        total_orders: 0,
+        revenue_completed: 0,
+        status_counts: {
+          pending: 0, accepted: 0, preparing: 0, ready: 0, completed: 0, cancelled: 0
+        }
+      };
+
+      const newTotals = {
+        total_orders: (prevTotals.total_orders || 0) + sessionOrders.length,
+        revenue_completed: Number(((prevTotals.revenue_completed || 0) + revenueCompleted).toFixed(2)),
+        status_counts: {
+          pending:   (prevTotals.status_counts?.pending   || 0) + (statusCounts.pending   || 0),
+          accepted:  (prevTotals.status_counts?.accepted  || 0) + (statusCounts.accepted  || 0),
+          preparing: (prevTotals.status_counts?.preparing || 0) + (statusCounts.preparing || 0),
+          ready:     (prevTotals.status_counts?.ready     || 0) + (statusCounts.ready     || 0),
+          completed: (prevTotals.status_counts?.completed || 0) + (statusCounts.completed || 0),
+          cancelled: (prevTotals.status_counts?.cancelled || 0) + (statusCounts.cancelled || 0),
+        }
+      };
+
+      // Keep the earliest started_at; always bump ended_at
+      const started_at = existing?.started_at ?? Timestamp.fromDate(sessionStart);
+
+      tx.set(dayRef, {
+        timezone: TZ,
+        started_at,
+        ended_at: nowTs(),
+        totals: newTotals,
+      }, { merge: true });
+    });
+
+    // Mirror session orders into subcollection (idempotent—same id overwrites the same doc)
+    const batch = writeBatch(db);
+    for (const o of sessionOrders) {
+      const oref = doc(collection(dayRef, "orders"), o.id);
+      batch.set(oref, { ...o, day_key: dayKey }, { merge: true });
+    }
+    await batch.commit();
+
+    // Rotate session start to now (new session starts immediately)
+    const nextStart = new Date();
+    await setDoc(doc(db, "settings", "current_day"), {
+      day_key: toDayKey(nextStart),
+      started_at: Timestamp.fromDate(nextStart)
+    }, { merge: true });
+
+    setSessionStart(nextStart);
+    toast({ title: "Day closed", description: `Archived ${sessionOrders.length} orders to ${dayKey}.` });
+  } catch (e) {
+    console.error(e);
+    toast({ title: "End Day failed", description: "Please try again.", variant: "destructive" });
   }
+}
 
 
   return (
@@ -500,12 +537,26 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
       <div className="container mx-auto px-4 py-6">
         {/* Session-scoped Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 mb-8">
+
+        <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Active Orders</p>
+                  <p className="text-2xl font-bold">{activeInSession}</p>
+                </div>
+                <ChefHat className="w-8 h-8 text-warning"/>
+              </div>
+            </CardContent>
+          </Card>
+
+
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Orders (Session)</p>
+                  <p className="text-sm text-muted-foreground">Total Orders</p>
                   <p className="text-2xl font-bold">{ordersInSession.length}</p>
                 </div>
                 <BarChart3 className="w-8 h-8 text-primary"/>
@@ -517,7 +568,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Revenue (Session)</p>
+                  <p className="text-sm text-muted-foreground">Total Sales</p>
                   <p className="text-2xl font-bold">${sessionTotalRevenue.toFixed(2)}</p>
                 </div>
                 <DollarSign className="w-8 h-8 text-success"/>
@@ -525,23 +576,38 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Active Orders (Session)</p>
-                  <p className="text-2xl font-bold">{activeInSession}</p>
+
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Tax (16%)</p>
+                    <p className="text-2xl font-bold">${sessionTotalTax.toFixed(2)}</p>
+                  </div>
+                  <DollarSign className="w-8 h-8 text-destructive"/>
                 </div>
-                <ChefHat className="w-8 h-8 text-warning"/>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Sales After Tax</p>
+                    <p className="text-2xl font-bold">${sessionRevenueAfterTax.toFixed(2)}</p>
+                  </div>
+                  <TrendingUp className="w-8 h-8 text-success"/>
+                </div>
+              </CardContent>
+            </Card>
+
 
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Completed (Session)</p>
+                  <p className="text-sm text-muted-foreground">Completed</p>
                   <p className="text-2xl font-bold">{completedInSession}</p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-primary"/>
@@ -809,7 +875,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           {/* Orders / Recent (SESSION) */}
           <TabsContent value="orders">
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><Clock className="w-5 h-5"/>Most Recent Orders (Session)</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Clock className="w-5 h-5"/>Most Recent Orders</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {ordersInSession.slice(0, 10).map((o) => (
@@ -834,23 +900,125 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           </TabsContent>
 
           {/* Analytics (GLOBAL — not reset by End Day) */}
-          <TabsContent value="analytics">
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5"/>Most Demanded Items (All Time)</CardTitle></CardHeader>
-              <CardContent>
-                {(() => {
-                  const counts = new Map<string, number>();
-                  orders.forEach(o => (o.items || []).forEach(i => counts.set(i.name, (counts.get(i.name) || 0) + (i.quantity || 0))));
-                  const ranked = Array.from(counts.entries()).sort((a,b) => b[1] - a[1]).slice(0,10);
-                  return ranked.length ? (
-                    <div className="space-y-2">
-                      {ranked.map(([name, qty]) => <div key={name} className="flex justify-between"><div>{name}</div><div className="font-medium">{qty}</div></div>)}
-                    </div>
-                  ) : <p className="text-muted-foreground">No sales data yet</p>;
-                })()}
-              </CardContent>
-            </Card>
-          </TabsContent>
+          {/* Analytics (GLOBAL & TODAY) */}
+<TabsContent value="analytics">
+  <Tabs defaultValue="all-time" className="space-y-4">
+    <TabsList className="grid grid-cols-2">
+      <TabsTrigger value="all-time">All Time</TabsTrigger>
+      <TabsTrigger value="today">Today</TabsTrigger>
+    </TabsList>
+
+    {/* All Time Analytics */}
+    <TabsContent value="all-time">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />Most Demanded Items (All Time)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {(() => {
+            const counts = new Map<string, number>();
+            orders.forEach(o =>
+              (o.items || []).forEach(i =>
+                counts.set(i.name, (counts.get(i.name) || 0) + (i.quantity || 0))
+              )
+            );
+            const ranked = Array.from(counts.entries()).sort((a,b) => b[1] - a[1]).slice(0,10);
+            return ranked.length ? (
+              <div className="space-y-2">
+                {ranked.map(([name, qty]) => (
+                  <div key={name} className="flex justify-between">
+                    <div>{name}</div>
+                    <div className="font-medium">{qty}</div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-muted-foreground">No sales data yet</p>;
+          })()}
+        </CardContent>
+      </Card>
+    </TabsContent>
+
+    {/* Today's Analytics */}
+    <TabsContent value="today">
+  <Card>
+    <CardHeader className="flex justify-between items-center">
+      <CardTitle className="flex items-center gap-2">
+        <TrendingUp className="w-5 h-5" />Today's Most Demanded Items
+      </CardTitle>
+      <Button 
+        size="sm" 
+        variant="outline" 
+        onClick={() => {
+          const printContent = `
+            <html>
+              <head>
+                <title>Today's Analytics</title>
+                <style>
+                  body { font-family: sans-serif; padding: 20px; }
+                  h2 { margin-bottom: 10px; }
+                  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                  th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+                </style>
+              </head>
+              <body>
+                <h2>Today's Most Demanded Items</h2>
+                <table>
+                  <tr><th>Item</th><th>Quantity</th></tr>
+                  ${Array.from(
+                    (() => {
+                      const counts = new Map<string, number>();
+                      ordersInSession.forEach(o => 
+                        (o.items || []).forEach(i => counts.set(i.name, (counts.get(i.name)||0)+i.quantity))
+                      );
+                      return Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10);
+                    })()
+                  ).map(([name, qty]) => `<tr><td>${name}</td><td>${qty}</td></tr>`).join("")}
+                </table>
+                <h2>Summary</h2>
+                <p>Total Revenue: $${sessionTotalRevenue.toFixed(2)}</p>
+                <p>Total Tax (16%): $${sessionTotalTax.toFixed(2)}</p>
+                <p>Revenue After Tax: $${sessionRevenueAfterTax.toFixed(2)}</p>
+              </body>
+            </html>
+          `;
+          const w = window.open('', '', 'width=800,height=600');
+          w?.document.write(printContent);
+          w?.document.close();
+          w?.print();
+        }}
+      >
+        Print / Export
+      </Button>
+    </CardHeader>
+    <CardContent>
+      {(() => {
+        const counts = new Map<string, number>();
+        ordersInSession.forEach(o =>
+          (o.items || []).forEach(i =>
+            counts.set(i.name, (counts.get(i.name) || 0) + (i.quantity || 0))
+          )
+        );
+        const ranked = Array.from(counts.entries()).sort((a,b) => b[1] - a[1]).slice(0,10);
+        return ranked.length ? (
+          <div className="space-y-2">
+            {ranked.map(([name, qty]) => (
+              <div key={name} className="flex justify-between">
+                <div>{name}</div>
+                <div className="font-medium">{qty}</div>
+              </div>
+            ))}
+          </div>
+        ) : <p className="text-muted-foreground">No orders today</p>;
+      })()}
+    </CardContent>
+  </Card>
+</TabsContent>
+
+  </Tabs>
+</TabsContent>
+
 
           {/* Status (SESSION) */}
           <TabsContent value="status">
@@ -868,44 +1036,90 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
           </TabsContent>
 
           {/* Past Days Orders Tab (reads from past_days) */}
-          <TabsContent value="past-days">
-            <Card>
-              <CardHeader><CardTitle>Past Days Orders</CardTitle></CardHeader>
-              <CardContent className="space-y-4">
-                <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-                  <div className="col-span-2">
-                    <Label htmlFor="past-day">Select Date</Label>
-                    <Input
-                      id="past-day"
-                      type="date"
-                      value={pastDay}
-                      onChange={(e) => setPastDay(e.target.value)}
-                    />
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm text-muted-foreground">Revenue for {pastDay}</div>
-                    <div className="text-2xl font-bold">${Number(pastDayRevenue || 0).toFixed(2)}</div>
-                  </div>
-                </div>
+          
+<TabsContent value="past-days">
+  <Card>
+    <CardHeader className="flex justify-between items-center">
+      <CardTitle>Past Days Orders</CardTitle>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          const printContent = `
+            <html>
+              <head>
+                <title>Past Day Orders - ${pastDay}</title>
+                <style>
+                  body { font-family: sans-serif; padding: 20px; }
+                  h2 { margin-bottom: 10px; }
+                  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                  th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+                </style>
+              </head>
+              <body>
+                <h2>Orders for ${pastDay}</h2>
+                <table>
+                  <tr><th>Table</th><th>Items</th><th>Status</th><th>Total</th></tr>
+                  ${pastDayOrders.map(o => `
+                    <tr>
+                      <td>${o.table_number}</td>
+                      <td>${o.items?.map(i => `${i.name} x${i.quantity}`).join(", ")}</td>
+                      <td>${o.status}</td>
+                      <td>$${(o.total_amount || 0).toFixed(2)}</td>
+                    </tr>
+                  `).join("")}
+                </table>
+                <h2>Summary</h2>
+                <p>Total Revenue: $${pastDayRevenue.toFixed(2)}</p>
+              </body>
+            </html>
+          `;
+          const w = window.open('', '', 'width=800,height=600');
+          w?.document.write(printContent);
+          w?.document.close();
+          w?.print();
+        }}
+      >
+        Print / Export
+      </Button>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+        <div className="col-span-2">
+          <Label htmlFor="past-day">Select Date</Label>
+          <Input
+            id="past-day"
+            type="date"
+            value={pastDay}
+            onChange={(e) => setPastDay(e.target.value)}
+          />
+        </div>
+        <div className="text-right">
+          <div className="text-sm text-muted-foreground">Sales for {pastDay}</div>
+          <div className="text-2xl font-bold">${Number(pastDayRevenue || 0).toFixed(2)}</div>
+        </div>
+      </div>
 
-                <div className="space-y-3">
-                  {pastDayOrders.length > 0 ? pastDayOrders.map((o) => (
-                    <div key={o.id} className="flex justify-between items-center border rounded p-3">
-                      <div>
-                        <p className="font-medium">Table {o.table_number}</p>
-                        <p className="text-sm text-muted-foreground">{toDate(o.created_at).toLocaleString()}</p>
-                        <p className="text-sm">{o.items?.map(i => `${i.name} x${i.quantity}`).join(", ")}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold">${(o.total_amount || 0).toFixed(2)}</p>
-                        <Badge className={getStatusColor(o.status)}>{o.status}</Badge>
-                      </div>
-                    </div>
-                  )) : <p className="text-muted-foreground">No orders found for this day</p>}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+      <div className="space-y-3">
+        {pastDayOrders.length > 0 ? pastDayOrders.map((o) => (
+          <div key={o.id} className="flex justify-between items-center border rounded p-3">
+            <div>
+              <p className="font-medium">Table {o.table_number}</p>
+              <p className="text-sm text-muted-foreground">{toDate(o.created_at).toLocaleString()}</p>
+              <p className="text-sm">{o.items?.map(i => `${i.name} x${i.quantity}`).join(", ")}</p>
+            </div>
+            <div className="text-right">
+              <p className="font-semibold">${(o.total_amount || 0).toFixed(2)}</p>
+              <Badge className={getStatusColor(o.status)}>{o.status}</Badge>
+            </div>
+          </div>
+        )) : <p className="text-muted-foreground">No orders found for this day</p>}
+      </div>
+    </CardContent>
+  </Card>
+</TabsContent>
+
+
         </Tabs>
       </div>
     </div>
