@@ -137,14 +137,14 @@ interface OrderAnalytics {
   total_amount: number;
   status: string;
   created_at: any;
-  items: Array<{ name: string; quantity: number; price_per_item?: number }>;
+  items: Array<{ name: string; quantity: number; price_per_item?: number; arabic_name?: string; arabic_description?: string }>;
   table_number?: number;
 }
 
 interface MenuItemForm {
   name: string;
   arabic_name: string;
-  arabic_description: string; // ✅ added
+  arabic_description: string;
   description: string;
   price: number;
   category: string;
@@ -186,7 +186,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [itemForm, setItemForm] = useState<MenuItemForm>({
     name: "",
     arabic_name: "",
-    arabic_description: "",   // ✅ included
+    arabic_description: "",
     description: "",
     price: 0,
     category: "",
@@ -202,8 +202,8 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [pastDayTotals, setPastDayTotals] = useState<DayTotals>(null);
 
   // Session tracking (persisted)
-  const [currentDayKey, setCurrentDayKey] = useState<string>("");         // empty until loaded
-  const [sessionStart, setSessionStart] = useState<Date | null>(null);    // null until loaded
+  const [currentDayKey, setCurrentDayKey] = useState<string>("");
+  const [sessionStart, setSessionStart] = useState<Date | null>(null);
 
   // Search & pagination
   const [itemSearch, setItemSearch] = useState("");
@@ -232,6 +232,28 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     return await getDownloadURL(r);
   }
 
+  // ---------- QR helper ----------
+  async function generateAndDownloadTableQR(tableNumber: number, alsoUpload = false) {
+    const url = `${window.location.origin}/t/${tableNumber}`;
+    const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 512 });
+
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `table-${tableNumber}-qr.png`;
+    a.click();
+
+    if (alsoUpload) {
+      const blob = await (await fetch(dataUrl)).blob();
+      const path = `qr-codes/table-${tableNumber}.png`;
+      const r = ref(storage, path);
+      await uploadBytes(r, blob);
+      const qrUrl = await getDownloadURL(r);
+      toast({ title: "QR uploaded", description: qrUrl });
+      return qrUrl;
+    }
+    return null;
+  }
+
   // ---------- CRUD: Items ----------
   async function createItem() {
     try {
@@ -239,7 +261,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       await addDoc(collection(db, "items"), {
         name: itemForm.name,
         arabic_name: itemForm.arabic_name,
-        arabic_description: itemForm.arabic_description, // ✅ save
+        arabic_description: itemForm.arabic_description,
         description: itemForm.description,
         price: Number(itemForm.price || 0),
         category: itemForm.category,
@@ -251,7 +273,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       setItemForm({
         name: "",
         arabic_name: "",
-        arabic_description: "", // ✅ reset
+        arabic_description: "",
         description: "",
         price: 0,
         category: "",
@@ -273,7 +295,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       await updateDoc(doc(db, "items", editingItemId), {
         name: itemForm.name,
         arabic_name: itemForm.arabic_name,
-        arabic_description: itemForm.arabic_description, // ✅ update
+        arabic_description: itemForm.arabic_description,
         description: itemForm.description,
         price: Number(itemForm.price || 0),
         category: itemForm.category,
@@ -283,7 +305,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       setItemForm({
         name: "",
         arabic_name: "",
-        arabic_description: "", // ✅ reset
+        arabic_description: "",
         description: "",
         price: 0,
         category: "",
@@ -307,28 +329,253 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     }
   }
 
-  // ... (UNCHANGED CODE for Categories, Tables, Orders, Analytics, Past Days, End Day, Realtime, etc.)
-
-  // ---------- Example Fix in Edit Button ----------
-  // inside Items list
-  // (only showing relevant part)
-  <Button
-    size="sm"
-    variant="outline"
-    onClick={() => {
-      setEditingItemId(item.id);
-      setItemForm({
-        name: item.name,
-        arabic_name: (item as any).arabic_name || "",
-        arabic_description: (item as any).arabic_description || "", // ✅ added
-        description: item.description,
-        price: item.price,
-        category: item.category,
-        image_url: item.image_url || "",
-        image_file: null,
+  // ---------- CRUD: Categories ----------
+  async function createCategory() {
+    try {
+      await addDoc(collection(db, "categories"), {
+        name: categoryForm.name,
+        description: categoryForm.description,
+        created_at: nowTs(),
       });
-    }}
-  >
-    <Edit className="w-4 h-4" />
-  </Button>
-};
+      setCategoryForm({ name: "", description: "" });
+      toast({ title: "Category created" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to create category", variant: "destructive" });
+    }
+  }
+
+  async function updateCategory() {
+    if (!editingCategoryId) return;
+    try {
+      await updateDoc(doc(db, "categories", editingCategoryId), {
+        name: categoryForm.name,
+        description: categoryForm.description,
+      });
+      setEditingCategoryId(null);
+      setCategoryForm({ name: "", description: "" });
+      toast({ title: "Category updated" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to update category", variant: "destructive" });
+    }
+  }
+
+  async function deleteCategory(id: string) {
+    try {
+      await deleteDoc(doc(db, "categories", id));
+      toast({ title: "Category deleted" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to delete category", variant: "destructive" });
+    }
+  }
+
+  // ---------- CRUD: Tables ----------
+  async function createTable() {
+    try {
+      await addDoc(collection(db, "tables"), {
+        table_number: Number(tableForm.table_number || 0),
+        status: "available",
+        created_at: nowTs(),
+      });
+      setTableForm({ table_number: 0 });
+      toast({ title: "Table created" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to create table", variant: "destructive" });
+    }
+  }
+
+  async function updateTable() {
+    if (!editingTableId) return;
+    try {
+      await updateDoc(doc(db, "tables", editingTableId), {
+        table_number: Number(tableForm.table_number || 0),
+      });
+      setEditingTableId(null);
+      setTableForm({ table_number: 0 });
+      toast({ title: "Table updated" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to update table", variant: "destructive" });
+    }
+  }
+
+  async function deleteTable(id: string) {
+    try {
+      await deleteDoc(doc(db, "tables", id));
+      toast({ title: "Table deleted" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to delete table", variant: "destructive" });
+    }
+  }
+
+  // ---------- Realtime: Orders (global) ----------
+  useEffect(() => {
+    const qy = query(collection(db, "orders"), orderBy("created_at", "desc"));
+    const unsub = onSnapshot(qy, (snap) => {
+      const rows: OrderAnalytics[] = snap.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          total_amount: data.total_amount || 0,
+          status: data.status || "unknown",
+          created_at: data.created_at,
+          items: data.items || [],
+          table_number: data.table_number,
+        };
+      });
+      setOrders(rows);
+    }, (err) => {
+      console.error("Admin orders subscription error:", err);
+      toast({ title: "Error", description: "Failed to load orders", variant: "destructive" });
+    });
+    return () => unsub();
+  }, [toast]);
+
+  // ---------- Persisted session: ensure doc exists once, then subscribe ----------
+  useEffect(() => {
+    let unsub: (() => void) | null = null;
+
+    (async () => {
+      const settingsRef = doc(db, "settings", "current_day");
+      const snap = await getDoc(settingsRef);
+
+      if (!snap.exists()) {
+        const now = new Date();
+        await setDoc(settingsRef, {
+          day_key: toDayKey(now),
+          started_at: Timestamp.fromDate(now),
+        });
+      }
+
+      unsub = onSnapshot(settingsRef, (s) => {
+        if (s.exists()) {
+          const data = s.data() as any;
+          setCurrentDayKey(data.day_key);
+          setSessionStart(toDate(data.started_at));
+        }
+      });
+    })();
+
+    return () => { if (unsub) unsub(); };
+  }, []);
+
+  // ---------- Derived: Orders in Session ----------
+  const effectiveSessionStart = sessionStart ?? new Date(0);
+  const ordersInSession = useMemo(
+    () => orders.filter(o => toDate(o.created_at) >= effectiveSessionStart),
+    [orders, effectiveSessionStart]
+  );
+
+  // ---------- Past Days tab ----------
+  useEffect(() => {
+    if (!pastDay) return;
+    const dayRef = doc(db, "past_days", pastDay);
+
+    const unsubDay = onSnapshot(dayRef, (snap) => {
+      const data = snap.data() as any;
+      if (data?.totals) {
+        setPastDayTotals({
+          total_orders: data.totals.total_orders || 0,
+          revenue_completed: data.totals.revenue_completed || 0,
+          status_counts: {
+            pending: data.totals.status_counts?.pending || 0,
+            accepted: data.totals.status_counts?.accepted || 0,
+            preparing: data.totals.status_counts?.preparing || 0,
+            ready: data.totals.status_counts?.ready || 0,
+            completed: data.totals.status_counts?.completed || 0,
+            cancelled: data.totals.status_counts?.cancelled || 0,
+          }
+        });
+      } else {
+        setPastDayTotals(null);
+      }
+    });
+
+    const ordersRef = collection(dayRef, "orders");
+    const qy = query(ordersRef, orderBy("created_at", "desc"));
+    const unsubOrders = onSnapshot(qy, (snap) => {
+      const rows = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as OrderAnalytics[];
+      setPastDayOrders(rows);
+    });
+
+    return () => { unsubDay(); unsubOrders(); };
+  }, [pastDay]);
+
+  // ---------- Computed metrics ----------
+  const sessionTotalRevenue = useMemo(
+    () => ordersInSession.filter(o => o.status === "completed")
+      .reduce((s, o) => s + (o.total_amount || 0), 0),
+    [ordersInSession]
+  );
+
+  const sessionOrdersByStatus = useMemo(() => {
+    return ordersInSession.reduce<Record<string, number>>((acc, o) => {
+      acc[o.status] = (acc[o.status] || 0) + 1;
+      return acc;
+    }, { pending: 0, accepted: 0, preparing: 0, ready: 0, completed: 0, cancelled: 0 } as any);
+  }, [ordersInSession]);
+
+  const taxRate = 0.16;
+  const sessionTotalTax = useMemo(
+    () => ordersInSession.filter(o => o.status === "completed")
+      .reduce((sum, o) => sum + (o.total_amount || 0) * taxRate, 0),
+    [ordersInSession]
+  );
+
+  const sessionRevenueAfterTax = useMemo(
+    () => sessionTotalRevenue - sessionTotalTax,
+    [sessionTotalRevenue, sessionTotalTax]
+  );
+
+  const completedInSession = sessionOrdersByStatus.completed || 0;
+  const activeInSession = (sessionOrdersByStatus.pending || 0)
+    + (sessionOrdersByStatus.accepted || 0)
+    + (sessionOrdersByStatus.preparing || 0)
+    + (sessionOrdersByStatus.ready || 0);
+
+  const pastDayRevenue = pastDayTotals
+    ? pastDayTotals.revenue_completed
+    : pastDayOrders.filter(o => o.status === "completed")
+        .reduce((sum, o) => sum + (o.total_amount || 0), 0);
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "pending": return "bg-warning text-warning-foreground";
+      case "accepted": return "bg-primary text-primary-foreground";
+      case "preparing": return "bg-secondary text-secondary-foreground";
+      case "ready": return "bg-success text-success-foreground";
+      case "completed": return "bg-success text-success-foreground";
+      case "cancelled": return "bg-destructive text-destructive-foreground";
+      default: return "bg-muted text-muted-foreground";
+    }
+  };
+
+  // ---------- End Day ----------
+  async function endDay() {
+    try {
+      if (!sessionStart) return;
+
+      const sessionOrders = orders.filter(o => toDate(o.created_at) >= sessionStart);
+
+      const statusCounts: Record<string, number> = {
+        pending: 0, accepted: 0, preparing: 0, ready: 0, completed: 0, cancelled: 0
+      };
+      let revenueCompleted = 0;
+      for (const o of sessionOrders) {
+        statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
+        if (o.status === "completed") revenueCompleted += o.total_amount || 0;
+      }
+
+      const dayKey = toDayKey(sessionStart);
+      const dayRef = doc(db, "past_days", dayKey);
+
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(dayRef);
+        const existing = snap.exists() ? (snap.data() as any) : null;
+
+        const prevTotals = existing
+
