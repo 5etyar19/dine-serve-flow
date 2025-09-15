@@ -30,7 +30,7 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
 
   const { toast } = useToast();
   const { menuItems, categories, loading } = useMenu();
-  const { t, isRTL } = useLanguage();
+  const { t, isRTL, language } = useLanguage();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState("All");
   const [customerName, setCustomerName] = useState("");
@@ -194,7 +194,6 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
                   <p className="text-white/80 text-sm">{t('reviewOrder')}</p>
                 </div>
               </div>
-              <LanguageToggle />
             </div>
           </div>
         </header>
@@ -298,7 +297,6 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <LanguageToggle />
               {getTotalItems() > 0 && (
                 <Button className="relative bg-white/20 hover:bg-white/30 text-white border-white/30" onClick={() => setShowCart(true)}>
                   <ShoppingCart className="w-4 h-4 mr-2" /> {t('viewCart')}
@@ -342,7 +340,7 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
               <MenuCard
                 key={item.id}
                 id={item.id}
-                name={item.name}
+                name={language === 'ar' && (item as any).arabic_name ? (item as any).arabic_name : item.name}
                 description={item.description}
                 price={item.price}
                 image={item.image || undefined}

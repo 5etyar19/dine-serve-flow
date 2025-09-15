@@ -45,8 +45,28 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
 
   // Initialize notification sound
   useEffect(() => {
-    audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IAAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhCSuUy+/Mdxo9Kos7e2u8k3lm4v7JQZXhcPhyWKCOJYfB0E1Q');
-    audioRef.current.preload = 'auto';
+    // Create a more pleasant ring sound
+    const createRingTone = () => {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+      oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2);
+      
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.4);
+    };
+    
+    audioRef.current = { play: createRingTone } as HTMLAudioElement;
   }, []);
 
   useEffect(() => {
@@ -245,11 +265,8 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
                   <div className="space-y-3 mb-4">
                     {(order.items || []).map((item, idx) => (
                       <div key={idx} className="flex flex-col p-3 bg-orange-50 rounded-lg">
-                        <div className="flex justify-between">
+                        <div>
                           <span className="font-medium text-orange-800">{item.name} x{item.quantity}</span>
-                          <span className="text-sm text-gray-600">
-                            ${(item.price_per_item * item.quantity).toFixed(2)}
-                          </span>
                         </div>
                         {item.note && (
                           <div className="mt-2 pl-3 border-l-2 border-orange-300 text-sm italic text-gray-700">
@@ -268,11 +285,6 @@ export const KitchenInterface = ({ onBack }: KitchenInterfaceProps) => {
                   )}
 
                   <Separator className="my-4" />
-
-                  <div className="flex justify-between items-center mb-4 p-3 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg">
-                    <span className="font-bold text-white">{t('total')}:</span>
-                    <span className="text-xl font-bold text-white">${order.total_amount.toFixed(2)}</span>
-                  </div>
 
                   {/* Actions */}
                   <div className="flex gap-2">

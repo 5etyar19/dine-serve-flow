@@ -12,6 +12,7 @@ import { db } from "@/lib/firebase";
 export interface MenuItem {
   id: string;
   name: string;
+  arabic_name?: string;
   description: string;
   price: number;
   category: string; // store the category name for simple filtering
