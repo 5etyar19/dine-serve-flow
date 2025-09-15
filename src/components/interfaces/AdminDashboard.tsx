@@ -697,7 +697,7 @@ const sessionRevenueAfterTax = useMemo(
                       {editingItemId ? "Update Item" : "Create Item"}
                     </Button>
                     {editingItemId && (
-                      <Button variant="outline" onClick={() => { setEditingItemId(null); setItemForm({ name: "", arabic_name: "", arabic_description:"", description: "", description: "", price: 0, category: "", image_url: "", image_file: null }); }}>
+                      <Button variant="outline" onClick={() => { setEditingItemId(null); setItemForm({ name: "", arabic_name: "", arabic_description:"", description: "", price: 0, category: "", image_url: "", image_file: null }); }}>
                         Cancel
                       </Button>
                     )}
