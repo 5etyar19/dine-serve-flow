@@ -157,7 +157,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         is_vegetarian: false,
         created_at: nowTs(),
       });
-      setItemForm({ name: "", arabic_name: "", description: "", price: 0, category: "", image_url: "", image_file: null });
+      setItemForm({ name: "", arabic_name: "",  arabic_description: "",description: "", price: 0, category: "", image_url: "", image_file: null });
       toast({ title: "Item created" });
     } catch (e) {
       console.error(e);
@@ -179,7 +179,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         image_url: imageUrl || "",
       });
       setEditingItemId(null);
-      setItemForm({ name: "", arabic_name: "", description: "", price: 0, category: "", image_url: "", image_file: null });
+      setItemForm({ name: "", arabic_name: "",  arabic_description: "",description: "", price: 0, category: "", image_url: "", image_file: null });
       toast({ title: "Item updated" });
     } catch (e) {
       console.error(e);
@@ -697,7 +697,7 @@ const sessionRevenueAfterTax = useMemo(
                       {editingItemId ? "Update Item" : "Create Item"}
                     </Button>
                     {editingItemId && (
-                      <Button variant="outline" onClick={() => { setEditingItemId(null); setItemForm({ name: "", arabic_name: "", description: "", price: 0, category: "", image_url: "", image_file: null }); }}>
+                      <Button variant="outline" onClick={() => { setEditingItemId(null); setItemForm({ name: "", arabic_name: "", arabic_description:"", description: "", description: "", price: 0, category: "", image_url: "", image_file: null }); }}>
                         Cancel
                       </Button>
                     )}
@@ -735,6 +735,7 @@ const sessionRevenueAfterTax = useMemo(
                                 setItemForm({
                                   name: item.name,
                                   arabic_name: (item as any).arabic_name || "",
+                                  arabic_description: (item as any).arabic_description || "",   // <-- add this
                                   description: item.description,
                                   price: item.price,
                                   category: item.category,
