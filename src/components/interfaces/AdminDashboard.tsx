@@ -11,6 +11,7 @@ import {
   ArrowLeft, BarChart3, DollarSign, TrendingUp, Clock, ChefHat,
   Plus, Edit, Trash2, Upload, QrCode
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useMenu } from "@/contexts/MenuContext";
 import { db, storage, nowTs } from "@/lib/firebase";
@@ -648,10 +649,16 @@ const sessionRevenueAfterTax = useMemo(
                     <Label htmlFor="item-arabic-name">Arabic Name</Label>
                     <Input id="item-arabic-name" value={itemForm.arabic_name} onChange={(e) => setItemForm({ ...itemForm, arabic_name: e.target.value })} placeholder="اسم الصنف" />
                   </div>
-                  <div>
-                    <Label htmlFor="item-description">Description</Label>
-                    <Input id="item-description" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} placeholder="Item description" />
-                  </div>
+                    <div>
+                      <Label htmlFor="item-arabic-description">Arabic Description</Label>
+                      <Textarea 
+                        id="item-arabic-description" 
+                        value={itemForm.arabic_description || ""} 
+                        onChange={(e) => setItemForm({ ...itemForm, arabic_description: e.target.value })} 
+                        placeholder="وصف الصنف" 
+                        rows={3}
+                      />
+                    </div>
                   <div>
                     <Label htmlFor="item-price">Price</Label>
                     <Input id="item-price" type="number" step="0.01" value={itemForm.price} onChange={(e) => setItemForm({ ...itemForm, price: parseFloat(e.target.value) || 0 })} placeholder="0.00" />

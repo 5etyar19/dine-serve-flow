@@ -340,8 +340,10 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
               <MenuCard
                 key={item.id}
                 id={item.id}
-                name={language === 'ar' && (item as any).arabic_name ? (item as any).arabic_name : item.name}
+                name={item.name}
+                arabic_name={(item as any).arabic_name}
                 description={item.description}
+                arabic_description={(item as any).arabic_description}
                 price={item.price}
                 image={item.image || undefined}
                 category={item.category}

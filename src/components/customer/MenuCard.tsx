@@ -115,7 +115,9 @@ import { useLanguage } from "@/contexts/LanguageContext";
 interface MenuItemProps {
   id: string;
   name: string;
+  arabic_name?: string;
   description: string;
+  arabic_description?: string;
   price: number;
   image: string;
   category: string;
@@ -128,7 +130,9 @@ interface MenuItemProps {
 export const MenuCard = ({
   id,
   name,
+  arabic_name,
   description,
+  arabic_description,
   price,
   image,
   category,
@@ -137,7 +141,7 @@ export const MenuCard = ({
   disabled = false,
 }: MenuItemProps) => {
   const [localQuantity, setLocalQuantity] = useState(quantity);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const handleQuantityChange = (newQuantity: number) => {
     if (disabled) return; // Prevent changes if disabled
@@ -174,12 +178,12 @@ export const MenuCard = ({
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <div className="flex-1">
-          <h3 className="text-lg font-semibold mb-2">
-            {language === 'ar' && item.arabic_name ? item.arabic_name : item.name}
-          </h3>
-          <p className="text-sm text-muted-foreground mb-2">
-            {language === 'ar' && item.arabic_description ? item.arabic_description : item.description}
-          </p>
+            <CardTitle className="text-lg leading-tight">
+              {language === 'ar' && arabic_name ? arabic_name : name}
+            </CardTitle>
+            <CardDescription className="text-sm leading-relaxed mb-2">
+              {language === 'ar' && arabic_description ? arabic_description : description}
+            </CardDescription>
             <Badge variant="outline" className="mt-1 text-xs">
               {category}
             </Badge>
@@ -188,9 +192,7 @@ export const MenuCard = ({
         </div>
       </CardHeader>
 
-      <CardContent className="pt-0">
-        <CardDescription className="text-sm leading-relaxed mb-4">{description}</CardDescription>
-
+      <CardContent className="pt-0">        
         <div className="flex items-center justify-between">
           {localQuantity === 0 ? (
             <Button
