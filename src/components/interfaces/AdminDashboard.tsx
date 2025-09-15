@@ -38,6 +38,7 @@ interface OrderAnalytics {
 interface MenuItemForm {
   name: string;
   arabic_name: string;
+  arabic_description: string;
   description: string;
   price: number;
   category: string;
