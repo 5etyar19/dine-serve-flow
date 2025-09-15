@@ -174,7 +174,12 @@ export const MenuCard = ({
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <div className="flex-1">
-            <CardTitle className="text-lg leading-tight">{name}</CardTitle>
+          <h3 className="text-lg font-semibold mb-2">
+            {language === 'ar' && item.arabic_name ? item.arabic_name : item.name}
+          </h3>
+          <p className="text-sm text-muted-foreground mb-2">
+            {language === 'ar' && item.arabic_description ? item.arabic_description : item.description}
+          </p>
             <Badge variant="outline" className="mt-1 text-xs">
               {category}
             </Badge>

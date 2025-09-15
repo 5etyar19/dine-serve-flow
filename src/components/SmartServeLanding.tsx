@@ -8,11 +8,14 @@ import { CashierInterface } from "./interfaces/CashierInterface";
 import { AdminDashboard } from "./interfaces/AdminDashboard";
 import { QrCode, Users, ChefHat, CreditCard, BarChart3, Smartphone, Clock, CheckCircle } from "lucide-react";
 import heroImage from "@/assets/hero-restaurant.jpg";
+import { LanguageToggle } from "@/components/ui/language-toggle";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 type InterfaceType = "landing" | "customer" | "kitchen" | "cashier" | "admin";
 
 export const SmartServeLanding = () => {
   const [currentInterface, setCurrentInterface] = useState<InterfaceType>("landing");
+  const { t } = useLanguage();
 
   if (currentInterface === "customer") {
     return <CustomerInterface onBack={() => setCurrentInterface("landing")} />;
@@ -33,46 +36,51 @@ export const SmartServeLanding = () => {
   const features = [
     {
       icon: <QrCode className="w-8 h-8 text-primary" />,
-      title: "QR Code Ordering",
-      description: "Customers scan QR codes on tables to access the digital menu and place orders instantly"
+      title: t('qrCodeOrdering'),
+      description: t('qrDescription')
     },
     {
       icon: <ChefHat className="w-4 h-4 text-primary" />,
-      title: "Kitchen Management", 
-      description: "Real-time order notifications with accept/reject functionality and preparation tracking"
+      title: t('kitchenManagement'), 
+      description: t('kitchenDescription')
     },
     {
       icon: <CreditCard className="w-8 h-8 text-primary" />,
-      title: "Cashier Interface",
-      description: "Streamlined payment processing, invoice generation, and order status management"
+      title: t('cashierInterface'),
+      description: t('cashierDescription')
     },
     {
       icon: <BarChart3 className="w-8 h-8 text-primary" />,
-      title: "Admin Dashboard",
-      description: "Comprehensive management of menu, tables, staff, and detailed financial reporting"
+      title: t('adminDashboard'),
+      description: t('adminDescription')
     }
   ];
 
   const benefits = [
     {
       icon: <Smartphone className="w-6 h-6 text-success" />,
-      title: "Contactless Experience",
-      description: "Reduce physical contact with digital menus and mobile ordering"
+      title: t('contactlessExperience'),
+      description: t('contactlessDescription')
     },
     {
       icon: <Clock className="w-6 h-6 text-success" />,
-      title: "Faster Service",
-      description: "Eliminate wait times for menu browsing and order taking"
+      title: t('fasterService'),
+      description: t('fasterDescription')
     },
     {
       icon: <CheckCircle className="w-6 h-6 text-success" />,
-      title: "Order Accuracy",
-      description: "Direct customer input reduces miscommunication errors"
+      title: t('orderAccuracy'),
+      description: t('accuracyDescription')
     }
   ];
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
+      {/* Language Toggle */}
+      <div className="fixed top-4 right-4 z-50">
+        <LanguageToggle />
+      </div>
+      
       {/* Hero Section */}
       <section className="relative overflow-hidden">
         <div 
@@ -85,12 +93,12 @@ export const SmartServeLanding = () => {
         <div className="relative container mx-auto px-4 py-20">
           <div className="max-w-3xl">
             <Badge className="mb-6 bg-primary/10 text-primary hover:bg-primary/20">
-              Next-Generation Restaurant Technology
+              {t('nextGenRestaurantTech')}
             </Badge>
             
             <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
               <span className="bg-gradient-hero bg-clip-text text-transparent">
-                SmartServe
+                {t('smartServe')}
               </span>
               <br />
               <span className="text-foreground">
@@ -99,9 +107,7 @@ export const SmartServeLanding = () => {
             </h1>
             
             <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
-              Transform your restaurant with QR code ordering, real-time kitchen management, 
-              cashier integration, and comprehensive admin controls. Streamline operations 
-              and enhance customer experience.
+              {t('transformRestaurant')}
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4">
@@ -112,7 +118,7 @@ export const SmartServeLanding = () => {
                 className="text-lg px-8"
               >
                 <QrCode className="w-5 h-5 mr-2" />
-                Try Customer Interface
+                {t('tryCustomerInterface')}
               </Button>
               
               <Button 
@@ -122,7 +128,7 @@ export const SmartServeLanding = () => {
                 className="text-lg px-8"
               >
                 <ChefHat className="w-5 h-5 mr-2" />
-                View Kitchen Dashboard
+                {t('viewKitchenDashboard')}
               </Button>
             </div>
           </div>
@@ -134,10 +140,10 @@ export const SmartServeLanding = () => {
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Complete Restaurant Management
+              {t('completeRestaurantManagement')}
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Four integrated interfaces designed to streamline every aspect of your restaurant operations
+              {t('fourIntegratedInterfaces')}
             </p>
           </div>
           
@@ -166,10 +172,10 @@ export const SmartServeLanding = () => {
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">
-              Experience the Interfaces
+              {t('experienceInterfaces')}
             </h2>
             <p className="text-xl text-muted-foreground">
-              Try out each interface to see how SmartServe works
+              {t('tryEachInterface')}
             </p>
           </div>
           
@@ -232,22 +238,22 @@ export const SmartServeLanding = () => {
       {/* Benefits Section */}
       <section className="py-20">
         <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl md:text-4xl font-bold text-center mb-16">
-              Why Choose SmartServe?
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              {t('whyChooseSmartServe')}
             </h2>
-            
-            <div className="grid md:grid-cols-3 gap-8">
-              {benefits.map((benefit, index) => (
-                <div key={index} className="text-center animate-fade-in">
-                  <div className="mx-auto mb-4 p-3 bg-success/10 rounded-full w-fit">
-                    {benefit.icon}
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2">{benefit.title}</h3>
-                  <p className="text-muted-foreground">{benefit.description}</p>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-8">
+            {benefits.map((benefit, index) => (
+              <div key={index} className="text-center animate-fade-in">
+                <div className="mx-auto mb-4 p-3 bg-success/10 rounded-full w-fit">
+                  {benefit.icon}
                 </div>
-              ))}
-            </div>
+                <h3 className="text-lg font-semibold mb-2">{benefit.title}</h3>
+                <p className="text-muted-foreground">{benefit.description}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -256,20 +262,18 @@ export const SmartServeLanding = () => {
       <section className="py-20 bg-gradient-hero">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-3xl md:text-4xl font-bold text-primary-foreground mb-4">
-            Ready to Transform Your Restaurant?
+            {t('readyToTransform')}
           </h2>
           <p className="text-xl text-primary-foreground/90 mb-8 max-w-2xl mx-auto">
-            Join the future of restaurant operations with SmartServe. 
-            Contact us to get started with your implementation.
+            {t('joinFuture')}
           </p>
           
           <p className="text-primary-foreground/80 mb-6">
-            <strong>Note:</strong> Full functionality requires backend integration with Supabase for real-time updates, 
-            user authentication, and data persistence.
+            <strong>Note:</strong> {t('noteFullFunctionality')}
           </p>
           
           <Button variant="secondary" size="lg" className="text-lg px-8">
-            Contact Sales
+            {t('contactSales')}
           </Button>
         </div>
       </section>
