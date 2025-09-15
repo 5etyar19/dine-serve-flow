@@ -105,127 +105,230 @@
 
 
 
-import { useState } from "react";
+// src/components/interfaces/AdminDashboard.tsx
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Minus, Star } from "lucide-react";
-import { useLanguage } from "@/contexts/LanguageContext";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  ArrowLeft, BarChart3, DollarSign, TrendingUp, Clock, ChefHat,
+  Plus, Edit, Trash2, Upload, QrCode
+} from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { useMenu } from "@/contexts/MenuContext";
+import { db, storage, nowTs } from "@/lib/firebase";
+import {
+  addDoc, updateDoc, deleteDoc, doc, collection, onSnapshot, query, orderBy,
+  setDoc, writeBatch, Timestamp, getDoc, runTransaction
+} from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import QRCode from "qrcode";
 
-interface MenuItemProps {
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+
+// ---------- Types ----------
+interface OrderAnalytics {
   id: string;
-  name: string;
-  arabic_name?: string;
-  description: string;
-  arabic_description?: string;
-  price: number;
-  image: string;
-  category: string;
-
-  quantity?: number;
-  onQuantityChange?: (id: string, quantity: number) => void;
-  disabled?: boolean; // <--- new prop
+  total_amount: number;
+  status: string;
+  created_at: any;
+  items: Array<{ name: string; quantity: number; price_per_item?: number }>;
+  table_number?: number;
 }
 
-export const MenuCard = ({
-  id,
-  name,
-  arabic_name,
-  description,
-  arabic_description,
-  price,
-  image,
-  category,
-  quantity = 0,
-  onQuantityChange,
-  disabled = false,
-}: MenuItemProps) => {
-  const [localQuantity, setLocalQuantity] = useState(quantity);
-  const { t, language } = useLanguage();
+interface MenuItemForm {
+  name: string;
+  arabic_name: string;
+  arabic_description: string; // ✅ added
+  description: string;
+  price: number;
+  category: string;
+  image_url: string;
+  image_file?: File | null;
+}
 
-  const handleQuantityChange = (newQuantity: number) => {
-    if (disabled) return; // Prevent changes if disabled
-    const finalQuantity = Math.max(0, newQuantity);
-    setLocalQuantity(finalQuantity);
-    onQuantityChange?.(id, finalQuantity);
+interface Category { id: string; name: string; description?: string }
+interface Table { id: string; table_number: number }
+
+type DayTotals = {
+  total_orders: number;
+  revenue_completed: number;
+  status_counts: {
+    pending: number; accepted: number; preparing: number; ready: number; completed: number; cancelled: number;
+    [k: string]: number;
   };
+} | null;
 
-  return (
-    <Card
-      className={`overflow-hidden transition-all duration-300 animate-fade-in group bg-white/95 backdrop-blur-sm border-0 shadow-elegant hover:shadow-glow hover:scale-105 ${disabled ? "opacity-50" : ""}`}
-    >
-      <div className="relative overflow-hidden">
-        <img
-          src={image}
-          alt={name}
-          className="w-full h-48 object-cover transition-all duration-500 group-hover:scale-110"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        {disabled && (
-          <span className="absolute top-3 right-3 bg-destructive text-destructive-foreground text-xs px-3 py-1 rounded-full font-medium">
-            Unavailable
-          </span>
-        )}
-        {!disabled && (
-          <div className="absolute top-3 left-3 flex gap-1">
-            {[...Array(5)].map((_, i) => (
-              <Star key={i} className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-            ))}
-          </div>
-        )}
-      </div>
+// ---------- Helpers ----------
+const TZ = "Asia/Amman";
+const dayFmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+const toDayKey = (d: Date) => dayFmt.format(d); // "YYYY-MM-DD"
+const toDate = (v: any): Date => v?.toDate ? v.toDate() : (v instanceof Date ? v : new Date(v));
 
-      <CardHeader className="pb-2">
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <CardTitle className="text-lg leading-tight">
-              {language === 'ar' && arabic_name ? arabic_name : name}
-            </CardTitle>
-            <CardDescription className="text-sm leading-relaxed mb-2">
-              {language === 'ar' && arabic_description ? arabic_description : description}
-            </CardDescription>
-            <Badge variant="outline" className="mt-1 text-xs">
-              {category}
-            </Badge>
-          </div>
-          <div className="text-lg font-bold text-primary">${price.toFixed(2)}</div>
-        </div>
-      </CardHeader>
+export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
+  const { toast } = useToast();
+  const { menuItems, categories } = useMenu();
 
-      <CardContent className="pt-0">        
-        <div className="flex items-center justify-between">
-          {localQuantity === 0 ? (
-            <Button
-              className="flex-1 bg-gradient-warm hover:shadow-glow transition-all duration-300 h-11 font-semibold"
-              onClick={() => handleQuantityChange(1)}
-              disabled={disabled}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {t('addToOrder')}
-            </Button>
-          ) : (
-            <div className="flex items-center gap-3">
-              <Button
-                variant="quantity"
-                onClick={() => handleQuantityChange(localQuantity - 1)}
-                disabled={disabled || localQuantity <= 0} // <--- disabled
-              >
-                <Minus className="w-4 h-4" />
-              </Button>
+  // Orders (realtime, global)
+  const [orders, setOrders] = useState<OrderAnalytics[]>([]);
 
-              <span className="font-semibold text-lg min-w-[2rem] text-center">{localQuantity}</span>
+  // Edit states
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingTableId, setEditingTableId] = useState<string | null>(null);
 
-              <Button
-                variant="quantity"
-                onClick={() => handleQuantityChange(localQuantity + 1)}
-                disabled={disabled} // <--- disabled
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
+  // Forms
+  const [itemForm, setItemForm] = useState<MenuItemForm>({
+    name: "",
+    arabic_name: "",
+    arabic_description: "",   // ✅ included
+    description: "",
+    price: 0,
+    category: "",
+    image_url: "",
+    image_file: null
+  });
+  const [categoryForm, setCategoryForm] = useState<{ name: string; description: string }>({ name: "", description: "" });
+  const [tableForm, setTableForm] = useState<{ table_number: number }>({ table_number: 0 });
+
+  // Past Days tab
+  const [pastDay, setPastDay] = useState<string>(new Date().toISOString().split("T")[0]); // YYYY-MM-DD
+  const [pastDayOrders, setPastDayOrders] = useState<OrderAnalytics[]>([]);
+  const [pastDayTotals, setPastDayTotals] = useState<DayTotals>(null);
+
+  // Session tracking (persisted)
+  const [currentDayKey, setCurrentDayKey] = useState<string>("");         // empty until loaded
+  const [sessionStart, setSessionStart] = useState<Date | null>(null);    // null until loaded
+
+  // Search & pagination
+  const [itemSearch, setItemSearch] = useState("");
+  const [categorySearch, setCategorySearch] = useState("");
+  const [tableSearch, setTableSearch] = useState<string>("");
+  const itemsPerPage = 4;
+  const [itemPage, setItemPage] = useState(1);
+  const [categoryPage, setCategoryPage] = useState(1);
+  const [tablePage, setTablePage] = useState(1);
+
+  const [selectedMonth, setSelectedMonth] = useState("");
+
+  // ---------- Pagination helpers ----------
+  const paginate = (array: any[], page: number) => {
+    const start = (page - 1) * itemsPerPage;
+    return array.slice(start, start + itemsPerPage);
+  };
+  const pageCount = (array: any[]) => Math.ceil(array.length / itemsPerPage);
+
+  // ---------- Upload helper ----------
+  async function uploadImageIfAny(file?: File | null): Promise<string> {
+    if (!file) return "";
+    const key = `item-images/${Date.now()}-${file.name}`;
+    const r = ref(storage, key);
+    await uploadBytes(r, file);
+    return await getDownloadURL(r);
+  }
+
+  // ---------- CRUD: Items ----------
+  async function createItem() {
+    try {
+      const imageUrl = await uploadImageIfAny(itemForm.image_file);
+      await addDoc(collection(db, "items"), {
+        name: itemForm.name,
+        arabic_name: itemForm.arabic_name,
+        arabic_description: itemForm.arabic_description, // ✅ save
+        description: itemForm.description,
+        price: Number(itemForm.price || 0),
+        category: itemForm.category,
+        image_url: imageUrl || "",
+        is_available: true,
+        is_vegetarian: false,
+        created_at: nowTs(),
+      });
+      setItemForm({
+        name: "",
+        arabic_name: "",
+        arabic_description: "", // ✅ reset
+        description: "",
+        price: 0,
+        category: "",
+        image_url: "",
+        image_file: null
+      });
+      toast({ title: "Item created" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to create item", variant: "destructive" });
+    }
+  }
+
+  async function updateItem() {
+    if (!editingItemId) return;
+    try {
+      let imageUrl = itemForm.image_url;
+      if (itemForm.image_file) imageUrl = await uploadImageIfAny(itemForm.image_file);
+      await updateDoc(doc(db, "items", editingItemId), {
+        name: itemForm.name,
+        arabic_name: itemForm.arabic_name,
+        arabic_description: itemForm.arabic_description, // ✅ update
+        description: itemForm.description,
+        price: Number(itemForm.price || 0),
+        category: itemForm.category,
+        image_url: imageUrl || "",
+      });
+      setEditingItemId(null);
+      setItemForm({
+        name: "",
+        arabic_name: "",
+        arabic_description: "", // ✅ reset
+        description: "",
+        price: 0,
+        category: "",
+        image_url: "",
+        image_file: null
+      });
+      toast({ title: "Item updated" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to update item", variant: "destructive" });
+    }
+  }
+
+  async function deleteItem(id: string) {
+    try {
+      await deleteDoc(doc(db, "items", id));
+      toast({ title: "Item deleted" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to delete item", variant: "destructive" });
+    }
+  }
+
+  // ... (UNCHANGED CODE for Categories, Tables, Orders, Analytics, Past Days, End Day, Realtime, etc.)
+
+  // ---------- Example Fix in Edit Button ----------
+  // inside Items list
+  // (only showing relevant part)
+  <Button
+    size="sm"
+    variant="outline"
+    onClick={() => {
+      setEditingItemId(item.id);
+      setItemForm({
+        name: item.name,
+        arabic_name: (item as any).arabic_name || "",
+        arabic_description: (item as any).arabic_description || "", // ✅ added
+        description: item.description,
+        price: item.price,
+        category: item.category,
+        image_url: item.image_url || "",
+        image_file: null,
+      });
+    }}
+  >
+    <Edit className="w-4 h-4" />
+  </Button>
 };
