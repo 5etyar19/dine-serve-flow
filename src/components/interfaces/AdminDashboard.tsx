@@ -38,7 +38,7 @@ interface OrderAnalytics {
 interface MenuItemForm {
   name: string;
   arabic_name: string;
-  arabic_description: string;
+  arabic_description: string; // <-- add this
   description: string;
   price: number;
   category: string;
@@ -77,7 +77,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [editingTableId, setEditingTableId] = useState<string | null>(null);
 
   // Forms
-  const [itemForm, setItemForm] = useState<MenuItemForm>({ name: "", arabic_name: "", description: "", price: 0, category: "", image_url: "", image_file: null });
+  const [itemForm, setItemForm] = useState<MenuItemForm>({ name: "", arabic_name: "", arabic_description: "" , description: "", price: 0, category: "", image_url: "", image_file: null });
   const [categoryForm, setCategoryForm] = useState<{ name: string; description: string }>({ name: "", description: "" });
   const [tableForm, setTableForm] = useState<{ table_number: number }>({ table_number: 0 });
 
