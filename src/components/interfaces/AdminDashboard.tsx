@@ -11,7 +11,6 @@ import {
   ArrowLeft, BarChart3, DollarSign, TrendingUp, Clock, ChefHat,
   Plus, Edit, Trash2, Upload, QrCode
 } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useMenu } from "@/contexts/MenuContext";
 import { db, storage, nowTs } from "@/lib/firebase";
@@ -37,8 +36,6 @@ interface OrderAnalytics {
 
 interface MenuItemForm {
   name: string;
-  arabic_name: string;
-  arabic_description: string; // <-- add this
   description: string;
   price: number;
   category: string;
@@ -77,7 +74,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   const [editingTableId, setEditingTableId] = useState<string | null>(null);
 
   // Forms
-  const [itemForm, setItemForm] = useState<MenuItemForm>({ name: "", arabic_name: "", arabic_description: "" , description: "", price: 0, category: "", image_url: "", image_file: null });
+  const [itemForm, setItemForm] = useState<MenuItemForm>({ name: "", description: "", price: 0, category: "", image_url: "", image_file: null });
   const [categoryForm, setCategoryForm] = useState<{ name: string; description: string }>({ name: "", description: "" });
   const [tableForm, setTableForm] = useState<{ table_number: number }>({ table_number: 0 });
 
@@ -148,7 +145,6 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       const imageUrl = await uploadImageIfAny(itemForm.image_file);
       await addDoc(collection(db, "items"), {
         name: itemForm.name,
-        arabic_name: itemForm.arabic_name,
         description: itemForm.description,
         price: Number(itemForm.price || 0),
         category: itemForm.category,
@@ -157,7 +153,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         is_vegetarian: false,
         created_at: nowTs(),
       });
-      setItemForm({ name: "", arabic_name: "",  arabic_description: "",description: "", price: 0, category: "", image_url: "", image_file: null });
+      setItemForm({ name: "", description: "", price: 0, category: "", image_url: "", image_file: null });
       toast({ title: "Item created" });
     } catch (e) {
       console.error(e);
@@ -172,14 +168,13 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
       if (itemForm.image_file) imageUrl = await uploadImageIfAny(itemForm.image_file);
       await updateDoc(doc(db, "items", editingItemId), {
         name: itemForm.name,
-        arabic_name: itemForm.arabic_name,
         description: itemForm.description,
         price: Number(itemForm.price || 0),
         category: itemForm.category,
         image_url: imageUrl || "",
       });
       setEditingItemId(null);
-      setItemForm({ name: "", arabic_name: "",  arabic_description: "",description: "", price: 0, category: "", image_url: "", image_file: null });
+      setItemForm({ name: "", description: "", price: 0, category: "", image_url: "", image_file: null });
       toast({ title: "Item updated" });
     } catch (e) {
       console.error(e);
@@ -647,19 +642,9 @@ const sessionRevenueAfterTax = useMemo(
                     <Input id="item-name" value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} placeholder="Item name" />
                   </div>
                   <div>
-                    <Label htmlFor="item-arabic-name">Arabic Name</Label>
-                    <Input id="item-arabic-name" value={itemForm.arabic_name} onChange={(e) => setItemForm({ ...itemForm, arabic_name: e.target.value })} placeholder="اسم الصنف" />
+                    <Label htmlFor="item-description">Description</Label>
+                    <Input id="item-description" value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} placeholder="Item description" />
                   </div>
-                    <div>
-                      <Label htmlFor="item-arabic-description">Arabic Description</Label>
-                      <Textarea 
-                        id="item-arabic-description" 
-                        value={itemForm.arabic_description || ""} 
-                        onChange={(e) => setItemForm({ ...itemForm, arabic_description: e.target.value })} 
-                        placeholder="وصف الصنف" 
-                        rows={3}
-                      />
-                    </div>
                   <div>
                     <Label htmlFor="item-price">Price</Label>
                     <Input id="item-price" type="number" step="0.01" value={itemForm.price} onChange={(e) => setItemForm({ ...itemForm, price: parseFloat(e.target.value) || 0 })} placeholder="0.00" />
@@ -697,7 +682,7 @@ const sessionRevenueAfterTax = useMemo(
                       {editingItemId ? "Update Item" : "Create Item"}
                     </Button>
                     {editingItemId && (
-                      <Button variant="outline" onClick={() => { setEditingItemId(null); setItemForm({ name: "", arabic_name: "", arabic_description:"", description: "", price: 0, category: "", image_url: "", image_file: null }); }}>
+                      <Button variant="outline" onClick={() => { setEditingItemId(null); setItemForm({ name: "", description: "", price: 0, category: "", image_url: "", image_file: null }); }}>
                         Cancel
                       </Button>
                     )}
@@ -734,8 +719,6 @@ const sessionRevenueAfterTax = useMemo(
                                 setEditingItemId(item.id);
                                 setItemForm({
                                   name: item.name,
-                                  arabic_name: (item as any).arabic_name || "",
-                                  arabic_description: (item as any).arabic_description || "",   // <-- add this
                                   description: item.description,
                                   price: item.price,
                                   category: item.category,
@@ -925,127 +908,36 @@ const sessionRevenueAfterTax = useMemo(
       <TabsTrigger value="today">Today</TabsTrigger>
     </TabsList>
 
-     {/* All Time Analytics */}
-     <TabsContent value="all-time">
-       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-         {/* Revenue Bar Chart */}
-         <Card>
-           <CardHeader>
-             <CardTitle className="flex items-center gap-2">
-               <BarChart3 className="w-5 h-5" />
-               Daily Revenue (Last 7 Days)
-             </CardTitle>
-           </CardHeader>
-           <CardContent>
-             <div className="h-[300px] w-full">
-               <ResponsiveContainer width="100%" height="100%">
-                 <BarChart
-                   data={(() => {
-                     const data = [];
-                     const today = new Date();
-                     for (let i = 6; i >= 0; i--) {
-                       const date = new Date(today);
-                       date.setDate(date.getDate() - i);
-                       const dayRevenue = i === 0 ? sessionTotalRevenue : Math.random() * 500; // Mock data for past days
-                       data.push({
-                         date: date.toLocaleDateString(),
-                         revenue: Number(dayRevenue.toFixed(2))
-                       });
-                     }
-                     return data;
-                   })()}
-                   margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                 >
-                   <XAxis dataKey="date" />
-                   <YAxis />
-                   <Tooltip />
-                   <Bar dataKey="revenue" fill="hsl(var(--primary))" />
-                 </BarChart>
-               </ResponsiveContainer>
-             </div>
-           </CardContent>
-         </Card>
-
-         {/* Order Status Pie Chart */}
-         <Card>
-           <CardHeader>
-             <CardTitle className="flex items-center gap-2">
-               <TrendingUp className="w-5 h-5" />
-               Order Status Distribution
-             </CardTitle>
-           </CardHeader>
-           <CardContent>
-             <div className="h-[300px] w-full">
-               <ResponsiveContainer width="100%" height="100%">
-                 <PieChart>
-                   <Pie
-                     data={Object.entries(sessionOrdersByStatus)
-                       .filter(([_, count]) => count > 0)
-                       .map(([status, count]) => ({
-                         name: status,
-                         value: count,
-                         fill: status === 'completed' ? '#10b981' : 
-                              status === 'pending' ? '#f59e0b' :
-                              status === 'preparing' ? '#3b82f6' :
-                              status === 'ready' ? '#8b5cf6' : '#ef4444'
-                       }))}
-                     cx="50%"
-                     cy="50%"
-                     labelLine={false}
-                     label={({ name, value }) => `${name}: ${value}`}
-                     outerRadius={80}
-                     fill="#8884d8"
-                     dataKey="value"
-                   >
-                     {Object.entries(sessionOrdersByStatus)
-                       .filter(([_, count]) => count > 0)
-                       .map((entry, index) => (
-                         <Cell key={`cell-${index}`} fill={
-                           entry[0] === 'completed' ? '#10b981' : 
-                           entry[0] === 'pending' ? '#f59e0b' :
-                           entry[0] === 'preparing' ? '#3b82f6' :
-                           entry[0] === 'ready' ? '#8b5cf6' : '#ef4444'
-                         } />
-                       ))}
-                   </Pie>
-                   <Tooltip />
-                   <Legend />
-                 </PieChart>
-               </ResponsiveContainer>
-             </div>
-           </CardContent>
-         </Card>
-       </div>
-
-       {/* Most Demanded Items */}
-       <Card className="mt-6">
-         <CardHeader>
-           <CardTitle className="flex items-center gap-2">
-             <TrendingUp className="w-5 h-5" />Most Demanded Items (All Time)
-           </CardTitle>
-         </CardHeader>
-         <CardContent>
-           {(() => {
-             const counts = new Map<string, number>();
-             orders.forEach(o =>
-               (o.items || []).forEach(i =>
-                 counts.set(i.name, (counts.get(i.name) || 0) + (i.quantity || 0))
-               )
-             );
-             const ranked = Array.from(counts.entries()).sort((a,b) => b[1] - a[1]).slice(0,10);
-             return ranked.length ? (
-               <div className="space-y-2">
-                 {ranked.map(([name, qty]) => (
-                   <div key={name} className="flex justify-between">
-                     <div>{name}</div>
-                     <div className="font-medium">{qty}</div>
-                   </div>
-                 ))}
-               </div>
-             ) : <p className="text-muted-foreground">No sales data yet</p>;
-           })()}
-         </CardContent>
-       </Card>
+    {/* All Time Analytics */}
+    <TabsContent value="all-time">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />Most Demanded Items (All Time)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {(() => {
+            const counts = new Map<string, number>();
+            orders.forEach(o =>
+              (o.items || []).forEach(i =>
+                counts.set(i.name, (counts.get(i.name) || 0) + (i.quantity || 0))
+              )
+            );
+            const ranked = Array.from(counts.entries()).sort((a,b) => b[1] - a[1]).slice(0,10);
+            return ranked.length ? (
+              <div className="space-y-2">
+                {ranked.map(([name, qty]) => (
+                  <div key={name} className="flex justify-between">
+                    <div>{name}</div>
+                    <div className="font-medium">{qty}</div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-muted-foreground">No sales data yet</p>;
+          })()}
+        </CardContent>
+      </Card>
     </TabsContent>
 
     {/* Today's Analytics */}
@@ -1128,99 +1020,7 @@ const sessionRevenueAfterTax = useMemo(
 </TabsContent>
 
 
-          {/* Analytics */}
-          <TabsContent value="analytics">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Revenue Bar Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5" />
-                    Daily Revenue (Last 7 Days)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={(() => {
-                          const data = [];
-                          const today = new Date();
-                          for (let i = 6; i >= 0; i--) {
-                            const date = new Date(today);
-                            date.setDate(date.getDate() - i);
-                            const dayKey = toDayKey(date);
-                            const dayRevenue = i === 0 ? sessionTotalRevenue : Math.random() * 500; // Mock data for past days
-                            data.push({
-                              date: date.toLocaleDateString(),
-                              revenue: Number(dayRevenue.toFixed(2))
-                            });
-                          }
-                          return data;
-                        })()}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                      >
-                        <XAxis dataKey="date" />
-                        <YAxis />
-                        <Tooltip />
-                        <Bar dataKey="revenue" fill="hsl(var(--primary))" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Order Status Pie Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5" />
-                    Order Status Distribution
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={Object.entries(sessionOrdersByStatus)
-                            .filter(([_, count]) => count > 0)
-                            .map(([status, count]) => ({
-                              name: status,
-                              value: count,
-                              fill: status === 'completed' ? '#10b981' : 
-                                   status === 'pending' ? '#f59e0b' :
-                                   status === 'preparing' ? '#3b82f6' :
-                                   status === 'ready' ? '#8b5cf6' : '#ef4444'
-                            }))}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, value }) => `${name}: ${value}`}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {Object.entries(sessionOrdersByStatus)
-                            .filter(([_, count]) => count > 0)
-                            .map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={
-                                entry[0] === 'completed' ? '#10b981' : 
-                                entry[0] === 'pending' ? '#f59e0b' :
-                                entry[0] === 'preparing' ? '#3b82f6' :
-                                entry[0] === 'ready' ? '#8b5cf6' : '#ef4444'
-                              } />
-                            ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
+          {/* Status (SESSION) */}
           <TabsContent value="status">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {Object.entries(sessionOrdersByStatus).map(([status, count]) => (
