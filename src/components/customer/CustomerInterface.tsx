@@ -10,6 +10,8 @@ import { MenuCard } from "./MenuCard";
 import { ShoppingCart, Utensils, Coffee, Cake, ArrowLeft, User, Minus, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMenu } from "@/contexts/MenuContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { LanguageToggle } from "@/components/ui/language-toggle";
 import { addDoc, collection } from "firebase/firestore";
 import { db, nowTs } from "@/lib/firebase";
 import { useParams } from "react-router-dom";
@@ -25,6 +27,7 @@ interface CartItem {
 export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
   const { tableNumber } = useParams();
   const tableNum = Number(tableNumber) || 0;
+  const { t, isRTL } = useLanguage();
 
   const { toast } = useToast();
   const { menuItems, categories, loading } = useMenu();
@@ -169,15 +172,19 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
         <header className="bg-card border-b shadow-soft sticky top-0 z-10">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+              <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <Button variant="outline" onClick={() => setShowCart(false)}>
-                  <ArrowLeft className="w-4 h-4 mr-2" /> Back to Menu
+                  <ArrowLeft className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} /> 
+                  {t('customer.backToMenu')}
                 </Button>
                 <div>
-                  <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">Your Cart</h1>
-                  <p className="text-muted-foreground text-sm">Review your order</p>
+                  <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
+                    {t('customer.yourCart')}
+                  </h1>
+                  <p className="text-muted-foreground text-sm">{t('customer.reviewOrder')}</p>
                 </div>
               </div>
+              <LanguageToggle />
             </div>
           </div>
         </header>
@@ -187,12 +194,12 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
             <Card className="mb-6">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <User className="w-5 h-5" /> Customer Information
+                  <User className="w-5 h-5" /> {t('customer.customerInfo')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <Input
-                  placeholder="Enter your name (optional)"
+                  placeholder={t('customer.enterName')}
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                 />
@@ -202,7 +209,7 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <ShoppingCart className="w-5 h-5" /> Order Summary
+                  <ShoppingCart className="w-5 h-5" /> {t('customer.orderSummary')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -227,7 +234,7 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
                         </div>
                       </div>
                       <Textarea
-                        placeholder="Add a note (optional)"
+                        placeholder={t('customer.addNote')}
                         value={item.note || ""}
                         onChange={(e) => handleNoteChange(item.id, e.target.value)}
                       />
@@ -240,11 +247,11 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
 
                 <Separator className="my-4" />
                 <div className="flex justify-between items-center mb-6">
-                  <span className="text-xl font-bold">Total:</span>
+                  <span className="text-xl font-bold">{t('customer.total')}:</span>
                   <span className="text-xl font-bold text-primary">${getTotalPrice().toFixed(2)}</span>
                 </div>
                 <Button variant="hero" className="w-full" size="lg" onClick={placeOrder} disabled={placing}>
-                  {placing ? "Placing Order..." : "Place Order"}
+                  {placing ? t('customer.placingOrder', 'Placing Order...') : t('customer.placeOrder')}
                 </Button>
               </CardContent>
             </Card>
@@ -260,23 +267,30 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
       <header className="bg-card border-b shadow-soft sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <Button variant="outline" onClick={onBack}>
-                <ArrowLeft className="w-4 h-4 mr-2" /> Back
+                <ArrowLeft className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} /> 
+                {t('nav.back')}
               </Button>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">SmartServe</h1>
-                <p className="text-muted-foreground text-sm">Table #{tableNum || "—"}</p>
+                <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
+                  {t('customer.title')}
+                </h1>
+                <p className="text-muted-foreground text-sm">{t('customer.table')} #{tableNum || "—"}</p>
               </div>
             </div>
+            <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+              <LanguageToggle />
             {getTotalItems() > 0 && (
               <Button variant="hero" className="relative" onClick={() => setShowCart(true)}>
-                <ShoppingCart className="w-4 h-4 mr-2" /> View Cart
+                <ShoppingCart className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} /> 
+                {t('customer.viewCart')}
                 <Badge className="absolute -top-2 -right-2 bg-success text-success-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs">
                   {getTotalItems()}
                 </Badge>
               </Button>
             )}
+            </div>
           </div>
         </div>
       </header>
@@ -320,7 +334,7 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
           <Card className="sticky bottom-4 shadow-elegant bg-card/95 backdrop-blur-sm">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2">
-                <ShoppingCart className="w-5 h-5"/>Your Order
+                <ShoppingCart className="w-5 h-5"/>{t('customer.yourOrder')}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -334,10 +348,12 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
               </div>
               <Separator className="my-3" />
               <div className="flex justify-between items-center mb-4">
-                <span className="text-lg font-bold">Total:</span>
+                <span className="text-lg font-bold">{t('customer.total')}:</span>
                 <span className="text-lg font-bold text-primary">${getTotalPrice().toFixed(2)}</span>
               </div>
-              <Button variant="hero" className="w-full" size="lg" onClick={() => setShowCart(true)}>Review & Place Order</Button>
+              <Button variant="hero" className="w-full" size="lg" onClick={() => setShowCart(true)}>
+                {t('customer.reviewAndPlace')}
+              </Button>
             </CardContent>
           </Card>
         )}

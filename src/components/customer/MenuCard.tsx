@@ -110,6 +110,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Minus } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface MenuItemProps {
   id: string;
@@ -136,6 +137,7 @@ export const MenuCard = ({
   disabled = false, // default false
 }: MenuItemProps) => {
   const [localQuantity, setLocalQuantity] = useState(quantity);
+  const { t, language } = useLanguage();
 
   const handleQuantityChange = (newQuantity: number) => {
     if (disabled) return; // Prevent changes if disabled
@@ -164,7 +166,9 @@ export const MenuCard = ({
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <div className="flex-1">
-            <CardTitle className="text-lg leading-tight">{name}</CardTitle>
+            <CardTitle className="text-lg leading-tight">
+              {language === 'ar' && name.includes('_ar') ? name : name}
+            </CardTitle>
             <Badge variant="outline" className="mt-1 text-xs">
               {category}
             </Badge>
@@ -174,7 +178,9 @@ export const MenuCard = ({
       </CardHeader>
 
       <CardContent className="pt-0">
-        <CardDescription className="text-sm leading-relaxed mb-4">{description}</CardDescription>
+        <CardDescription className="text-sm leading-relaxed mb-4">
+          {language === 'ar' && description.includes('_ar') ? description : description}
+        </CardDescription>
 
         <div className="flex items-center justify-between">
           {localQuantity === 0 ? (
@@ -185,7 +191,7 @@ export const MenuCard = ({
               disabled={disabled} // <--- disabled
             >
               <Plus className="w-4 h-4 mr-2" />
-              Add to Order
+              {t('customer.addToOrder')}
             </Button>
           ) : (
             <div className="flex items-center gap-3">
