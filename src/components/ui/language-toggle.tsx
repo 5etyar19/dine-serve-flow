@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Languages } from "lucide-react";
 
-export const LanguageToggle = () => {
+export function LanguageToggle() {
   const { language, setLanguage } = useLanguage();
 
   const toggleLanguage = () => {
@@ -14,10 +14,10 @@ export const LanguageToggle = () => {
       variant="outline"
       size="sm"
       onClick={toggleLanguage}
-      className="flex items-center gap-2"
+      className="gap-2"
     >
-      <Languages className="w-4 h-4" />
-      {language === 'en' ? 'العربية' : 'English'}
+      <Languages className="h-4 w-4" />
+      {language === 'en' ? 'عربي' : 'English'}
     </Button>
   );
-};
+}

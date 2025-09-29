@@ -7,14 +7,14 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MenuCard } from "./MenuCard";
-import { ShoppingCart, Utensils, Coffee, Cake, ArrowLeft, User, Minus, Plus } from "lucide-react";
+import { ShoppingCart, Utensils, Coffee, Cake, ArrowLeft, User, Minus, Plus, Sparkles, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useMenu } from "@/contexts/MenuContext";
-import { useLanguage } from "@/contexts/LanguageContext";
-import { LanguageToggle } from "@/components/ui/language-toggle";
 import { addDoc, collection } from "firebase/firestore";
 import { db, nowTs } from "@/lib/firebase";
 import { useParams } from "react-router-dom";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { LanguageToggle } from "@/components/ui/language-toggle";
 
 interface CartItem {
   id: string;
@@ -27,10 +27,10 @@ interface CartItem {
 export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
   const { tableNumber } = useParams();
   const tableNum = Number(tableNumber) || 0;
-  const { t, isRTL } = useLanguage();
 
   const { toast } = useToast();
   const { menuItems, categories, loading } = useMenu();
+  const { t, isRTL, language } = useLanguage();
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState("All");
   const [customerName, setCustomerName] = useState("");
@@ -40,8 +40,8 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
   const [locationAllowed, setLocationAllowed] = useState(false);
   const [checkingLocation, setCheckingLocation] = useState(true);
 
-  const RESTAURANT_LAT = 31.9980127;
-  const RESTAURANT_LNG = 35.909189;
+  const RESTAURANT_LAT = 31.9882;
+  const RESTAURANT_LNG = 35.86661;
   const ALLOWED_RADIUS_METERS = 50;
 
   function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -141,10 +141,15 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
 
   if (loading || checkingLocation) {
     return (
-      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">{checkingLocation ? "Checking location..." : "Loading menu..."}</p>
+      <div className="min-h-screen bg-gradient-hero flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-white/20 border-t-white mx-auto"></div>
+            <Sparkles className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-6 w-6 text-white animate-pulse" />
+          </div>
+          <p className="text-white/90 text-lg font-medium">
+            {checkingLocation ? "Checking location..." : "Loading menu..."}
+          </p>
         </div>
       </div>
     );
@@ -152,10 +157,15 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
 
   if (!locationAllowed) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-subtle text-center px-4 space-y-2">
-        <h2 className="text-xl font-bold">You must be at the restaurant to place an order.</h2>
-        <p className="text-muted-foreground">Please come to the restaurant and scan the QR code on your table.</p>
-        <Button variant="hero" className="mt-4" onClick={onBack}>Back</Button>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-hero text-center px-4 space-y-6">
+        <div className="space-y-4">
+          <div className="w-20 h-20 mx-auto bg-white/20 rounded-full flex items-center justify-center">
+            <Utensils className="h-10 w-10 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-white">You must be at the restaurant to place an order.</h2>
+          <p className="text-white/80 text-lg max-w-md">Please come to the restaurant and scan the QR code on your table.</p>
+        </div>
+        <Button variant="secondary" size="lg" onClick={onBack}>{t('back')}</Button>
       </div>
     );
   }
@@ -168,48 +178,48 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
   // --- CART VIEW ---
   if (showCart) {
     return (
-      <div className="min-h-screen bg-gradient-subtle">
-        <header className="bg-card border-b shadow-soft sticky top-0 z-10">
+      <div className={`min-h-screen bg-gradient-hero ${isRTL ? 'rtl' : 'ltr'}`}>
+        <header className="bg-white/10 backdrop-blur-md border-b border-white/20 sticky top-0 z-10">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center justify-between">
-              <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-                <Button variant="outline" onClick={() => setShowCart(false)}>
-                  <ArrowLeft className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} /> 
-                  {t('customer.backToMenu')}
+              <div className="flex items-center gap-4">
+                <Button variant="secondary" onClick={() => setShowCart(false)}>
+                  <ArrowLeft className="w-4 h-4 mr-2" /> {t('menu')}
                 </Button>
                 <div>
-                  <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-                    {t('customer.yourCart')}
+                  <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                    <ShoppingCart className="h-6 w-6" />
+                    {t('yourCart')}
                   </h1>
-                  <p className="text-muted-foreground text-sm">{t('customer.reviewOrder')}</p>
+                  <p className="text-white/80 text-sm">{t('reviewOrder')}</p>
                 </div>
               </div>
-              <LanguageToggle />
             </div>
           </div>
         </header>
 
         <div className="container mx-auto px-4 py-6">
           <div className="max-w-2xl mx-auto">
-            <Card className="mb-6">
+            <Card className="mb-6 bg-white/95 backdrop-blur-sm shadow-elegant border-0">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="w-5 h-5" /> {t('customer.customerInfo')}
+                <CardTitle className="flex items-center gap-2 text-primary">
+                  <User className="w-5 h-5" /> {t('customerInfo')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <Input
-                  placeholder={t('customer.enterName')}
+                  placeholder={t('enterName')}
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
+                  className="border-2 focus:border-primary"
                 />
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="bg-white/95 backdrop-blur-sm shadow-elegant border-0">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ShoppingCart className="w-5 h-5" /> {t('customer.orderSummary')}
+                <CardTitle className="flex items-center gap-2 text-primary">
+                  <ShoppingCart className="w-5 h-5" /> {t('orderSummary')}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -234,9 +244,10 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
                         </div>
                       </div>
                       <Textarea
-                        placeholder={t('customer.addNote')}
+                        placeholder={t('addNote')}
                         value={item.note || ""}
                         onChange={(e) => handleNoteChange(item.id, e.target.value)}
+                        className="border-2 focus:border-primary resize-none"
                       />
                       <div className="text-right">
                         <p className="font-bold">${(item.price * item.quantity).toFixed(2)}</p>
@@ -246,12 +257,18 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
                 </div>
 
                 <Separator className="my-4" />
-                <div className="flex justify-between items-center mb-6">
-                  <span className="text-xl font-bold">{t('customer.total')}:</span>
-                  <span className="text-xl font-bold text-primary">${getTotalPrice().toFixed(2)}</span>
+                <div className="flex justify-between items-center mb-6 p-4 bg-gradient-warm rounded-lg">
+                  <span className="text-xl font-bold text-white">{t('total')}:</span>
+                  <span className="text-2xl font-bold text-white">${getTotalPrice().toFixed(2)}</span>
                 </div>
-                <Button variant="hero" className="w-full" size="lg" onClick={placeOrder} disabled={placing}>
-                  {placing ? t('customer.placingOrder', 'Placing Order...') : t('customer.placeOrder')}
+                <Button 
+                  className="w-full bg-gradient-warm hover:shadow-glow transition-all duration-300 h-14 text-lg font-semibold" 
+                  size="lg" 
+                  onClick={placeOrder} 
+                  disabled={placing}
+                >
+                  <Star className="w-5 h-5 mr-2" />
+                  {placing ? t('placingOrder') : t('placeOrder')}
                 </Button>
               </CardContent>
             </Card>
@@ -263,48 +280,58 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
 
   // --- MAIN MENU VIEW ---
   return (
-    <div className="min-h-screen bg-gradient-subtle">
-      <header className="bg-card border-b shadow-soft sticky top-0 z-10">
+    <div className={`min-h-screen bg-gradient-hero ${isRTL ? 'rtl' : 'ltr'}`}>
+      <header className="bg-white/10 backdrop-blur-md border-b border-white/20 sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
-              <Button variant="outline" onClick={onBack}>
-                <ArrowLeft className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} /> 
-                {t('nav.back')}
+            <div className="flex items-center gap-4">
+              <Button variant="secondary" onClick={onBack}>
+                <ArrowLeft className="w-4 h-4 mr-2" /> {t('back')}
               </Button>
               <div>
-                <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-                  {t('customer.title')}
+                <h1 className="text-3xl font-bold text-white flex items-center gap-2">
+                  <Sparkles className="h-8 w-8" />
+                  {t('smartServe')}
                 </h1>
-                <p className="text-muted-foreground text-sm">{t('customer.table')} #{tableNum || "—"}</p>
+                <p className="text-white/80 text-sm">{t('table')} #{tableNum || "—"}</p>
               </div>
             </div>
-            <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
-              <LanguageToggle />
-            {getTotalItems() > 0 && (
-              <Button variant="hero" className="relative" onClick={() => setShowCart(true)}>
-                <ShoppingCart className={`w-4 h-4 ${isRTL ? 'ml-2' : 'mr-2'}`} /> 
-                {t('customer.viewCart')}
-                <Badge className="absolute -top-2 -right-2 bg-success text-success-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs">
-                  {getTotalItems()}
-                </Badge>
-              </Button>
-            )}
+            <div className="flex items-center gap-3">
+              {getTotalItems() > 0 && (
+                <Button className="relative bg-white/20 hover:bg-white/30 text-white border-white/30" onClick={() => setShowCart(true)}>
+                  <ShoppingCart className="w-4 h-4 mr-2" /> {t('viewCart')}
+                  <Badge className="absolute -top-2 -right-2 bg-accent text-accent-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs animate-pulse">
+                    {getTotalItems()}
+                  </Badge>
+                </Button>
+              )}
             </div>
           </div>
         </div>
       </header>
 
       <div className="container mx-auto px-4 py-6">
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {categoryList.map((category) => (
-            <Button key={category} variant={activeCategory === category ? "default" : "outline"} onClick={() => setActiveCategory(category)} className="whitespace-nowrap">
-              {category === "Main Course" && <Utensils className="w-4 h-4 mr-2" />}
-              {category === "Beverages" && <Coffee className="w-4 h-4 mr-2" />}
-              {category === "Desserts" && <Cake className="w-4 h-4 mr-2" />}
-              {category}
-            </Button>
-          ))}
+        <div className="flex gap-3 mb-8 overflow-x-auto pb-2">
+          {categoryList.map((category) => {
+            const isActive = activeCategory === category;
+            return (
+              <Button 
+                key={category} 
+                variant={isActive ? "secondary" : "outline"} 
+                onClick={() => setActiveCategory(category)} 
+                className={`whitespace-nowrap transition-all duration-300 ${
+                  isActive 
+                    ? "bg-white text-primary shadow-glow border-0" 
+                    : "bg-white/20 text-white border-white/30 hover:bg-white/30"
+                }`}
+              >
+                {category === "Main Course" && <Utensils className="w-4 h-4 mr-2" />}
+                {category === "Beverages" && <Coffee className="w-4 h-4 mr-2" />}
+                {category === "Desserts" && <Cake className="w-4 h-4 mr-2" />}
+                {category === "All" ? t('all') : category}
+              </Button>
+            );
+          })}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
@@ -314,7 +341,9 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
                 key={item.id}
                 id={item.id}
                 name={item.name}
+                arabic_name={(item as any).arabic_name}
                 description={item.description}
+                arabic_description={(item as any).arabic_description}
                 price={item.price}
                 image={item.image || undefined}
                 category={item.category}
@@ -331,28 +360,34 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
         </div>
 
         {cart.length > 0 && (
-          <Card className="sticky bottom-4 shadow-elegant bg-card/95 backdrop-blur-sm">
+          <Card className="sticky bottom-4 shadow-elegant bg-white/95 backdrop-blur-md border-0 mx-4">
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2">
-                <ShoppingCart className="w-5 h-5"/>{t('customer.yourOrder')}
+              <CardTitle className="flex items-center gap-2 text-primary">
+                <ShoppingCart className="w-5 h-5"/>
+                {t('yourCart')}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2 mb-4">
                 {cart.map((item) => (
-                  <div key={item.id} className="flex justify-between items-center">
-                    <span className="text-sm">{item.name} x{item.quantity}</span>
-                    <span className="font-medium">${(item.price * item.quantity).toFixed(2)}</span>
+                  <div key={item.id} className="flex justify-between items-center py-1">
+                    <span className="text-sm font-medium">{item.name} x{item.quantity}</span>
+                    <span className="font-bold text-primary">${(item.price * item.quantity).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
               <Separator className="my-3" />
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-lg font-bold">{t('customer.total')}:</span>
-                <span className="text-lg font-bold text-primary">${getTotalPrice().toFixed(2)}</span>
+              <div className="flex justify-between items-center mb-4 p-3 bg-gradient-warm rounded-lg">
+                <span className="text-lg font-bold text-white">{t('total')}:</span>
+                <span className="text-xl font-bold text-white">${getTotalPrice().toFixed(2)}</span>
               </div>
-              <Button variant="hero" className="w-full" size="lg" onClick={() => setShowCart(true)}>
-                {t('customer.reviewAndPlace')}
+              <Button 
+                className="w-full bg-gradient-warm hover:shadow-glow transition-all duration-300 h-12 text-lg font-semibold" 
+                size="lg" 
+                onClick={() => setShowCart(true)}
+              >
+                <Star className="w-4 h-4 mr-2" />
+                {t('reviewPlaceOrder')}
               </Button>
             </CardContent>
           </Card>
