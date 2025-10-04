@@ -690,7 +690,25 @@ const sessionRevenueAfterTax = useMemo(
                         <Upload className="w-4 h-4 mr-2" />{itemForm.image_url ? "Change Image" : "Upload Image"}
                       </Button>
                     </div>
-                    {itemForm.image_url && (<div className="mt-2"><img src={itemForm.image_url} alt="Preview" className="w-20 h-20 object-cover rounded" /></div>)}
+                    {itemForm.image_url && (
+  <div className="mt-2 relative w-20 h-20">
+    <img
+      src={itemForm.image_url}
+      alt="Preview"
+      className="w-20 h-20 object-cover rounded"
+    />
+    <button
+      type="button"
+      onClick={() =>
+        setItemForm({ ...itemForm, image_url: "", image_file: null })
+      }
+      className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
+    >
+      ×
+    </button>
+  </div>
+)}
+
                   </div>
                   <div className="flex gap-2">
                     <Button onClick={editingItemId ? updateItem : createItem} className="flex-1">

@@ -40,7 +40,7 @@ export const SmartServeLanding = () => {
       description: t('qrDescription')
     },
     {
-      icon: <ChefHat className="w-4 h-4 text-primary" />,
+      icon: <ChefHat className="w-8 h-8 text-primary" />,
       title: t('kitchenManagement'), 
       description: t('kitchenDescription')
     },

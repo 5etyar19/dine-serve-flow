@@ -40,8 +40,8 @@ export const CustomerInterface = ({ onBack }: { onBack: () => void }) => {
   const [locationAllowed, setLocationAllowed] = useState(false);
   const [checkingLocation, setCheckingLocation] = useState(true);
 
-  const RESTAURANT_LAT = 31.967194;
-  const RESTAURANT_LNG = 35.875957;
+  const RESTAURANT_LAT = 31.997826;
+  const RESTAURANT_LNG = 35.909246;
   const ALLOWED_RADIUS_METERS = 50;
 
   function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
