@@ -438,8 +438,6 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, CreditCard, Receipt, Users, DollarSign, Clock, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useLanguage } from "@/contexts/LanguageContext";
-import { LanguageToggle } from "@/components/ui/language-toggle";
 import {
   collection,
   doc,
@@ -491,7 +489,6 @@ function toDate(val: Timestamp | string): Date {
 
 export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
   const { toast } = useToast();
-  const { t } = useLanguage();
   const [tables, setTables] = useState<Table[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -706,19 +703,18 @@ export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
             <div className="flex items-center gap-4">
               <Button variant="outline" onClick={onBack}>
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                {t('back')}
+                Back
               </Button>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-hero bg-clip-text text-transparent">
-                  {t('cashierInterface')}
+                  Cashier Interface
                 </h1>
-                <p className="text-muted-foreground text-sm">{t('paymentBilling')}</p>
+                <p className="text-muted-foreground text-sm">Payment & Table Management</p>
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <LanguageToggle />
               <div className="text-right">
-                <p className="text-sm text-muted-foreground">{t('activeOrders')}</p>
+                <p className="text-sm text-muted-foreground">Active Orders</p>
                 <p className="text-2xl font-bold text-primary">{orders.length}</p>
               </div>
             </div>
@@ -734,7 +730,7 @@ export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="w-5 h-5" />
-                  {t('tables')} Overview
+                  Tables Overview
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -755,16 +751,16 @@ export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
                           onClick={() => setSelectedTableId(table.id)}
                         >
                           <CardContent className="p-4 text-center">
-                          <div className="text-lg font-bold mb-2">{t('table')} {table.table_number}</div>
-                          <Badge
-                            className={`mb-2 ${
-                              hasOrders
-                                ? "bg-destructive text-destructive-foreground"
-                                : "bg-success text-success-foreground"
-                            }`}
-                          >
-                            {hasOrders ? t('inProgress') : (table.status ?? "Available")}
-                          </Badge>
+                            <div className="text-lg font-bold mb-2">Table {table.table_number}</div>
+                            <Badge
+                              className={`mb-2 ${
+                                hasOrders
+                                  ? "bg-destructive text-destructive-foreground"
+                                  : "bg-success text-success-foreground"
+                              }`}
+                            >
+                              {hasOrders ? "In Progress" : (table.status ?? "Available")}
+                            </Badge>
                             {hasOrders && (
                               <div className="text-sm">
                                 <p className="font-medium">${tableTotal.toFixed(2)}</p>
@@ -787,7 +783,7 @@ export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
                 <CardTitle className="flex items-center gap-2">
                   <Receipt className="w-5 h-5" />
                   {selectedTableNumber != null
-                    ? `${t('table')} ${selectedTableNumber} ${t('orderDetails')}`
+                    ? `Table ${selectedTableNumber} Details`
                     : "Select a Table"}
                 </CardTitle>
               </CardHeader>
@@ -831,26 +827,26 @@ export const CashierInterface = ({ onBack }: { onBack: () => void }) => {
                       </Card>
                     ))}
 
-                      <div className="mt-6 p-4 bg-primary/10 rounded-lg">
-                        <div className="flex justify-between items-center mb-4">
-                          <span className="text-lg font-bold">{t('table')} {t('total')}:</span>
-                          <span className="text-xl font-bold text-primary">
-                            ${selectedTableTotal.toFixed(2)}
-                          </span>
-                        </div>
-
-                        {/* Buttons for table receipt & payment */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button variant="outline" onClick={printReceiptForTable}>
-                            <Receipt className="w-4 h-4 mr-2" />
-                            Print Receipt
-                          </Button>
-                          <Button onClick={processPaymentForTable}>
-                            <CreditCard className="w-4 h-4 mr-2" />
-                            {t('processPayments')}
-                          </Button>
-                        </div>
+                    <div className="mt-6 p-4 bg-primary/10 rounded-lg">
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="text-lg font-bold">Table Total:</span>
+                        <span className="text-xl font-bold text-primary">
+                          ${selectedTableTotal.toFixed(2)}
+                        </span>
                       </div>
+
+                      {/* Buttons for table receipt & payment */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button variant="outline" onClick={printReceiptForTable}>
+                          <Receipt className="w-4 h-4 mr-2" />
+                          Print Receipt
+                        </Button>
+                        <Button onClick={processPaymentForTable}>
+                          <CreditCard className="w-4 h-4 mr-2" />
+                          Process Payment
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 ) : selectedTableNumber != null && selectedOrders.length === 0 ? (
                   <div className="text-center py-8">
