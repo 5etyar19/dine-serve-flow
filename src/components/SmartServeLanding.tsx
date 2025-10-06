@@ -5,13 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { CustomerInterface } from "./customer/CustomerInterface";
 import { KitchenInterface } from "./interfaces/KitchenInterface";
 import { CashierInterface } from "./interfaces/CashierInterface";
+import { WaiterInterface } from "./interfaces/WaiterInterface";
 import { AdminDashboard } from "./interfaces/AdminDashboard";
 import { QrCode, Users, ChefHat, CreditCard, BarChart3, Smartphone, Clock, CheckCircle } from "lucide-react";
 import heroImage from "@/assets/hero-restaurant.jpg";
 import { LanguageToggle } from "@/components/ui/language-toggle";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-type InterfaceType = "landing" | "customer" | "kitchen" | "cashier" | "admin";
+type InterfaceType = "landing" | "customer" | "kitchen" | "cashier" | "waiter" | "admin";
 
 export const SmartServeLanding = () => {
   const [currentInterface, setCurrentInterface] = useState<InterfaceType>("landing");
@@ -27,6 +28,10 @@ export const SmartServeLanding = () => {
 
   if (currentInterface === "cashier") {
     return <CashierInterface onBack={() => setCurrentInterface("landing")} />;
+  }
+
+  if (currentInterface === "waiter") {
+    return <WaiterInterface onBack={() => setCurrentInterface("landing")} />;
   }
 
   if (currentInterface === "admin") {
@@ -179,7 +184,7 @@ export const SmartServeLanding = () => {
             </p>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-4">
             <Button 
               variant="outline" 
               size="lg" 
@@ -203,6 +208,19 @@ export const SmartServeLanding = () => {
               <div>
                 <div className="font-semibold">Kitchen Dashboard</div>
                 <div className="text-sm text-muted-foreground">Manage orders</div>
+              </div>
+            </Button>
+
+            <Button 
+              variant="outline" 
+              size="lg" 
+              onClick={() => setCurrentInterface("waiter")}
+              className="h-auto p-6 flex-col gap-3 hover:shadow-elegant"
+            >
+              <Users className="w-8 h-8 text-primary" />
+              <div>
+                <div className="font-semibold">Waiter Interface</div>
+                <div className="text-sm text-muted-foreground">Take orders</div>
               </div>
             </Button>
             

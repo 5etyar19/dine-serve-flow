@@ -8,8 +8,9 @@ import { LanguageProvider } from "@/contexts/LanguageContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
-// NEW: import the two screens
+// NEW: import the screens
 import { CashierInterface } from "@/components/interfaces/CashierInterface";
+import { WaiterInterface } from "@/components/interfaces/WaiterInterface";
 import { CustomerInterface } from "@/components/customer/CustomerInterface";
 import { AdminDashboard } from "@/components/interfaces/AdminDashboard";
 
@@ -29,6 +30,10 @@ const App = () => (
             <Route
               path="/cashier"
               element={<CashierInterface onBack={() => window.history.back()} />}
+            />
+            <Route
+              path="/waiter"
+              element={<WaiterInterface onBack={() => window.history.back()} />}
             />
             {/* NEW: admin dashboard */}
             <Route
