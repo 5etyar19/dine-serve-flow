@@ -641,7 +641,7 @@ const sessionRevenueAfterTax = useMemo(
   disabled={!sessionStart}
   className="text-white font-semibold hover:bg-red-700"
 >
-  End Day
+  End Day1
 </Button>
 
             </div>
