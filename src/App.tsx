@@ -11,6 +11,7 @@ import NotFound from "./pages/NotFound";
 // NEW: import the screens
 import { CashierInterface } from "@/components/interfaces/CashierInterface";
 import { WaiterInterface } from "@/components/interfaces/WaiterInterface";
+import { WaiterTableOrder } from "@/components/interfaces/WaiterTableOrder";
 import { CustomerInterface } from "@/components/customer/CustomerInterface";
 import { AdminDashboard } from "@/components/interfaces/AdminDashboard";
 
@@ -34,6 +35,10 @@ const App = () => (
             <Route
               path="/waiter"
               element={<WaiterInterface onBack={() => window.history.back()} />}
+            />
+            <Route
+              path="/waiter/table/:tableNumber"
+              element={<WaiterTableOrder />}
             />
             {/* NEW: admin dashboard */}
             <Route
