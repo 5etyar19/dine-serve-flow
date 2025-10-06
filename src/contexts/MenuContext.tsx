@@ -12,7 +12,9 @@ import { db } from "@/lib/firebase";
 export interface MenuItem {
   id: string;
   name: string;
+  arabic_name?: string;
   description: string;
+  arabic_description?: string;
   price: number;
   category: string; // store the category name for simple filtering
   image_url?: string;
@@ -20,7 +22,12 @@ export interface MenuItem {
   is_available?: boolean;
 }
 
-export interface Category { id: string; name: string; description?: string }
+export interface Category { 
+  id: string; 
+  name: string; 
+  arabic_name?: string;
+  description?: string; 
+}
 export interface Table { id: string; table_number: number; status?: "available"|"occupied"|"reserved" }
 
 interface MenuContextValue {
