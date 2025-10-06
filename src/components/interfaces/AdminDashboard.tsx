@@ -7,22 +7,46 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  ArrowLeft, BarChart3, DollarSign, TrendingUp, Clock, ChefHat,
-  Plus, Edit, Trash2, Upload, QrCode
-} from "lucide-react";
+import {ArrowLeft, BarChart3, DollarSign, TrendingUp, Clock, ChefHat,Plus, Edit, Trash2, Upload, QrCode} from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useMenu } from "@/contexts/MenuContext";
 import { db, storage, nowTs } from "@/lib/firebase";
-import {
-  addDoc, updateDoc, deleteDoc, doc, collection, onSnapshot, query, orderBy,
-  setDoc, writeBatch, Timestamp, getDoc, runTransaction
+import {addDoc, updateDoc, deleteDoc, doc, collection, onSnapshot, query, orderBy,setDoc, writeBatch, Timestamp, getDoc, runTransaction
 } from "firebase/firestore";
+
+import { getDocs } from "firebase/firestore"; // ✅ make sure this is imported at top
+
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import QRCode from "qrcode";
 
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+
+
+
+
+
 
 
 // ---------- Types ----------
@@ -46,7 +70,14 @@ interface MenuItemForm {
   image_file?: File | null;
 }
 
-interface Category { id: string; name: string; description?: string }
+interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  arabic_name?: string;
+  arabic_description?: string;
+}
+
 interface Table { id: string; table_number: number }
 
 type DayTotals = {
@@ -78,11 +109,32 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
   // Forms
   const [itemForm, setItemForm] = useState<MenuItemForm>({ name: "", arabic_name: "", arabic_description: "" , description: "", price: 0, category: "", image_url: "", image_file: null });
-  const [categoryForm, setCategoryForm] = useState<{ name: string; description: string }>({ name: "", description: "" });
+  const [categoryForm, setCategoryForm] = useState<{
+  name: string;
+  description: string;
+  arabic_name: string;
+  arabic_description: string;
+}>({
+  name: "",
+  description: "",
+  arabic_name: "",
+  arabic_description: "",
+});
+
   const [tableForm, setTableForm] = useState<{ table_number: number }>({ table_number: 0 });
 
   // Past Days tab
   const [pastDay, setPastDay] = useState<string>(new Date().toISOString().split("T")[0]); // YYYY-MM-DD
+
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+ const [specificDay, setSpecificDay] = useState<string>(
+  new Date().toISOString().split("T")[0]
+);
+
+const [loadingRange, setLoadingRange] = useState(false);
+
+
   const [pastDayOrders, setPastDayOrders] = useState<OrderAnalytics[]>([]);
   const [pastDayTotals, setPastDayTotals] = useState<DayTotals>(null);
 
@@ -150,11 +202,11 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         name: itemForm.name,
         arabic_name: itemForm.arabic_name,
         description: itemForm.description,
+        arabic_description: itemForm.arabic_description,
         price: Number(itemForm.price || 0),
         category: itemForm.category,
         image_url: imageUrl || "",
         is_available: true,
-        is_vegetarian: false,
         created_at: nowTs(),
       });
       setItemForm({ name: "", arabic_name: "",  arabic_description: "",description: "", price: 0, category: "", image_url: "", image_file: null });
@@ -174,6 +226,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
         name: itemForm.name,
         arabic_name: itemForm.arabic_name,
         description: itemForm.description,
+        arabic_description: itemForm.arabic_description,
         price: Number(itemForm.price || 0),
         category: itemForm.category,
         image_url: imageUrl || "",
@@ -201,11 +254,15 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   async function createCategory() {
     try {
       await addDoc(collection(db, "categories"), {
-        name: categoryForm.name,
-        description: categoryForm.description,
-        created_at: nowTs(),
-      });
-      setCategoryForm({ name: "", description: "" });
+  name: categoryForm.name,
+  description: categoryForm.description,
+  arabic_name: categoryForm.arabic_name,
+  arabic_description: categoryForm.arabic_description,
+  created_at: nowTs(),
+});
+
+      setCategoryForm({ name: "", description: "", arabic_name: "", arabic_description: "" });
+
       toast({ title: "Category created" });
     } catch (e) {
       console.error(e);
@@ -216,12 +273,16 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
   async function updateCategory() {
     if (!editingCategoryId) return;
     try {
-      await updateDoc(doc(db, "categories", editingCategoryId), {
-        name: categoryForm.name,
-        description: categoryForm.description,
-      });
+     await updateDoc(doc(db, "categories", editingCategoryId), {
+  name: categoryForm.name,
+  description: categoryForm.description,
+  arabic_name: categoryForm.arabic_name,
+  arabic_description: categoryForm.arabic_description,
+});
+
       setEditingCategoryId(null);
-      setCategoryForm({ name: "", description: "" });
+      setCategoryForm({ name: "", description: "", arabic_name: "", arabic_description: "" });
+
       toast({ title: "Category updated" });
     } catch (e) {
       console.error(e);
@@ -339,7 +400,7 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
     [orders, effectiveSessionStart]
   );
 
-  // ---------- Past Days tab: listen to day totals & mirrored orders ----------
+  // ---------- History tab: listen to day totals & mirrored orders ----------
   useEffect(() => {
     if (!pastDay) return;
     const dayRef = doc(db, "past_days", pastDay);
@@ -373,6 +434,46 @@ export const AdminDashboard = ({ onBack }: { onBack: () => void }) => {
 
     return () => { unsubDay(); unsubOrders(); };
   }, [pastDay]);
+
+  useEffect(() => {
+  if (startDate && endDate) {
+    const loadRangeOrders = async () => {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const dayKeys: string[] = [];
+
+      // Collect all day keys
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        dayKeys.push(d.toISOString().split("T")[0]);
+      }
+
+      try {
+        // 🔥 Fetch all past_days orders in parallel
+        const allOrders = (
+          await Promise.all(
+            dayKeys.map(async (dayKey) => {
+              const dayRef = collection(db, "past_days", dayKey, "orders");
+              const snap = await getDocs(dayRef);
+              return snap.docs.map((d) => ({
+                id: d.id,
+                ...(d.data() as any),
+              }));
+            })
+          )
+        ).flat();
+
+        setPastDayOrders(allOrders);
+      } catch (err) {
+        console.error("Failed to load range orders:", err);
+        toast({ title: "Failed to load range orders", variant: "destructive" });
+      }
+    };
+
+    loadRangeOrders();
+  }
+}, [startDate, endDate]);
+
+
 
   // ---------- Computed metrics ----------
   // Dashboard (session-scoped)
@@ -534,7 +635,15 @@ const sessionRevenueAfterTax = useMemo(
                   {sessionStart ? sessionStart.toLocaleString() : "Loading…"}
                 </span>
               </div>
-              <Button variant="outline" onClick={endDay} disabled={!sessionStart}>End Day</Button>
+             <Button
+  variant="destructive"
+  onClick={endDay}
+  disabled={!sessionStart}
+  className="text-white font-semibold hover:bg-red-700"
+>
+  End Day
+</Button>
+
             </div>
           </div>
         </div>
@@ -623,13 +732,13 @@ const sessionRevenueAfterTax = useMemo(
 
         <Tabs defaultValue="items" className="space-y-6">
           <TabsList className="grid w-full grid-cols-7">
-            <TabsTrigger value="orders">Recent Orders</TabsTrigger>
+            <TabsTrigger value="orders">Today's Orders</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="status">Order Status</TabsTrigger>
             <TabsTrigger value="items">Items</TabsTrigger>
             <TabsTrigger value="categories">Categories</TabsTrigger>
             <TabsTrigger value="tables">Tables</TabsTrigger>
-            <TabsTrigger value="past-days">Past Days</TabsTrigger>
+            <TabsTrigger value="past-days">History</TabsTrigger>
           </TabsList>
 
           {/* Items */}
@@ -642,24 +751,54 @@ const sessionRevenueAfterTax = useMemo(
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="item-name">Name</Label>
-                    <Input id="item-name" value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} placeholder="Item name" />
-                  </div>
-                  <div>
-                    <Label htmlFor="item-arabic-name">Arabic Name</Label>
-                    <Input id="item-arabic-name" value={itemForm.arabic_name} onChange={(e) => setItemForm({ ...itemForm, arabic_name: e.target.value })} placeholder="اسم الصنف" />
-                  </div>
-                    <div>
-                      <Label htmlFor="item-arabic-description">Arabic Description</Label>
-                      <Textarea 
-                        id="item-arabic-description" 
-                        value={itemForm.arabic_description || ""} 
-                        onChange={(e) => setItemForm({ ...itemForm, arabic_description: e.target.value })} 
-                        placeholder="وصف الصنف" 
-                        rows={3}
-                      />
-                    </div>
+                 
+                  <Tabs defaultValue="en" className="w-full">
+                    <TabsList className="grid grid-cols-2 mb-2">
+                      <TabsTrigger value="en">English</TabsTrigger>
+                      <TabsTrigger value="ar">Arabic</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="en">
+                      <div>
+                        <Label htmlFor="item-name-en">Item Name (EN)</Label>
+                        <Input
+                          id="item-name-en"
+                          value={itemForm.name}
+                          onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
+                          placeholder="Item name in English"
+                        />
+                        <Label htmlFor="item-description-en">Description (EN)</Label>
+                        <Textarea
+                          id="item-description-en"
+                          value={itemForm.description}
+                          onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
+                          placeholder="Description in English"
+                          rows={3}
+                        />
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="ar">
+                      <div dir="rtl">
+                        <Label htmlFor="item-name-ar">اسم الصنف (AR)</Label>
+                        <Input
+                          id="item-name-ar"
+                          value={itemForm.arabic_name}
+                          onChange={(e) => setItemForm({ ...itemForm, arabic_name: e.target.value })}
+                          placeholder="اكتب اسم الصنف"
+                        />
+                        <Label htmlFor="item-description-ar">وصف الصنف (AR)</Label>
+                        <Textarea
+                          id="item-description-ar"
+                          value={itemForm.arabic_description}
+                          onChange={(e) => setItemForm({ ...itemForm, arabic_description: e.target.value })}
+                          placeholder="اكتب وصف الصنف"
+                          rows={3}
+                        />
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+
                   <div>
                     <Label htmlFor="item-price">Price</Label>
                     <Input id="item-price" type="number" step="0.01" value={itemForm.price} onChange={(e) => setItemForm({ ...itemForm, price: parseFloat(e.target.value) || 0 })} placeholder="0.00" />
@@ -691,23 +830,23 @@ const sessionRevenueAfterTax = useMemo(
                       </Button>
                     </div>
                     {itemForm.image_url && (
-  <div className="mt-2 relative w-20 h-20">
-    <img
-      src={itemForm.image_url}
-      alt="Preview"
-      className="w-20 h-20 object-cover rounded"
-    />
-    <button
-      type="button"
-      onClick={() =>
-        setItemForm({ ...itemForm, image_url: "", image_file: null })
-      }
-      className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
-    >
-      ×
-    </button>
-  </div>
-)}
+                  <div className="mt-2 relative w-20 h-20">
+                    <img
+                      src={itemForm.image_url}
+                      alt="Preview"
+                      className="w-20 h-20 object-cover rounded"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setItemForm({ ...itemForm, image_url: "", image_file: null })
+                      }
+                      className="absolute top-0 right-0 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
 
                   </div>
                   <div className="flex gap-2">
@@ -740,29 +879,78 @@ const sessionRevenueAfterTax = useMemo(
                       .map((item) => (
                         <div key={item.id} className="flex items-center justify-between p-3 border rounded-lg">
                           <div className="flex-1">
-                            <p className="font-medium">{item.name}</p>
-                            <p className="text-sm text-muted-foreground">{item.description}</p>
+                            <p className="font-medium">{item.name} •  {item.arabic_name}</p>
+                            <p className="text-sm text-muted-foreground">{item.description}  •  {item.arabic_description}</p>
                             <p className="text-sm font-medium text-primary">${item.price.toFixed(2)} • {item.category}</p>
                           </div>
                           <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setEditingItemId(item.id);
-                                setItemForm({
-                                  name: item.name,
-                                  arabic_name: (item as any).arabic_name || "",
-                                  arabic_description: (item as any).arabic_description || "",   // <-- add this
-                                  description: item.description,
-                                  price: item.price,
-                                  category: item.category,
-                                  image_url: item.image_url || "",
-                                  image_file: null,
-                                });
-                              }}
-                            ><Edit className="w-4 h-4" /></Button>
-                            <Button size="sm" variant="outline" onClick={() => deleteItem(item.id)}><Trash2 className="w-4 h-4" /></Button>
+                       <Dialog>
+                          <DialogTrigger asChild>
+                            <Button size="sm" variant="outline">
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          </DialogTrigger>
+
+                          <DialogContent className="max-w-sm">
+                            <DialogHeader>
+                              <DialogTitle>Edit Confirmation</DialogTitle>
+                              <DialogDescription>
+                                Are you sure you want to edit <b>{item.name}</b>?
+                              </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter className="flex justify-end gap-2 mt-4">
+                              <DialogTrigger asChild>
+                                <Button variant="outline">Cancel</Button>
+                              </DialogTrigger>
+
+                              <DialogTrigger asChild>
+                                <Button
+                                  onClick={() => {
+                                    setEditingItemId(item.id);
+                                    setItemForm({
+                                      name: item.name,
+                                      arabic_name: (item as any).arabic_name || "",
+                                      arabic_description: (item as any).arabic_description || "",
+                                      description: item.description,
+                                      price: item.price,
+                                      category: item.category,
+                                      image_url: item.image_url || "",
+                                      image_file: null,
+                                    });
+                                  }}
+                                >
+                                  Yes, Edit
+                                </Button>
+                              </DialogTrigger>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+
+                                                    <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="outline">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete this item?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. Are you sure you want to permanently delete <b>{item.name}</b>?
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => deleteItem(item.id)}
+                                className="bg-destructive text-white hover:bg-red-600"
+                              >
+                                Confirm Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+
                           </div>
                         </div>
                       ))}
@@ -787,20 +975,58 @@ const sessionRevenueAfterTax = useMemo(
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5" />{editingCategoryId ? "Edit Category" : "Add New Category"}</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="category-name">Name</Label>
-                    <Input id="category-name" value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} placeholder="Category name" />
-                  </div>
-                  <div>
-                    <Label htmlFor="category-description">Description</Label>
-                    <Input id="category-description" value={categoryForm.description} onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })} placeholder="Category description" />
-                  </div>
+                  <Tabs defaultValue="en" className="w-full">
+                    <TabsList className="grid grid-cols-2 mb-2">
+                      <TabsTrigger value="en">English</TabsTrigger>
+                      <TabsTrigger value="ar">Arabic</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="en">
+                      <div>
+                        <Label htmlFor="category-name-en">Category Name (EN)</Label>
+                        <Input
+                          id="category-name-en"
+                          value={categoryForm.name}
+                          onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                          placeholder="Category name in English"
+                        />
+                        <Label htmlFor="category-description-en">Description (EN)</Label>
+                        <Input
+                          id="category-description-en"
+                          value={categoryForm.description}
+                          onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                          placeholder="Description in English"
+                        />
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="ar">
+                      <div dir="rtl">
+                        <Label htmlFor="category-name-ar">اسم الفئة (AR)</Label>
+                        <Input
+                          id="category-name-ar"
+                          value={(categoryForm as any).arabic_name || ""}
+                          onChange={(e) => setCategoryForm({ ...(categoryForm as any), arabic_name: e.target.value })}
+                          placeholder="اكتب اسم الفئة"
+                        />
+                        <Label htmlFor="category-description-ar">وصف الفئة (AR)</Label>
+                        <Input
+                          id="category-description-ar"
+                          value={(categoryForm as any).arabic_description || ""}
+                          onChange={(e) => setCategoryForm({ ...(categoryForm as any), arabic_description: e.target.value })}
+                          placeholder="اكتب وصف الفئة"
+                        />
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+
                   <div className="flex gap-2">
                     <Button onClick={editingCategoryId ? updateCategory : createCategory} className="flex-1">
                       {editingCategoryId ? "Update Category" : "Create Category"}
                     </Button>
                     {editingCategoryId && (
-                      <Button variant="outline" onClick={() => { setEditingCategoryId(null); setCategoryForm({ name: "", description: "" }); }}>
+                      <Button variant="outline" onClick={() => { setEditingCategoryId(null); setCategoryForm({ name: "", description: "", arabic_name: "", arabic_description: "" });
+ }}>
                         Cancel
                       </Button>
                     )}
@@ -825,14 +1051,72 @@ const sessionRevenueAfterTax = useMemo(
                       .map((c) => (
                         <div key={c.id} className="flex items-center justify-between p-3 border rounded-lg">
                           <div className="flex-1">
-                            <p className="font-medium">{c.name}</p>
-                            <p className="text-sm text-muted-foreground">{c.description}</p>
+                            <p className="font-medium">{c.name} • {c.arabic_name}</p>
+                            <p className="text-sm text-muted-foreground">{c.description} • {c.arabic_description}</p>
                           </div>
                           <div className="flex gap-2">
-                            <Button size="sm" variant="outline" onClick={() => { setEditingCategoryId(c.id); setCategoryForm({ name: c.name, description: c.description || "" }); }}>
+                           <Dialog>
+                          <DialogTrigger asChild>
+                            <Button size="sm" variant="outline">
                               <Edit className="w-4 h-4" />
                             </Button>
-                            <Button size="sm" variant="outline" onClick={() => deleteCategory(c.id)}><Trash2 className="w-4 h-4" /></Button>
+                          </DialogTrigger>
+
+                          <DialogContent className="max-w-sm">
+                            <DialogHeader>
+                              <DialogTitle>Edit Confirmation</DialogTitle>
+                              <DialogDescription>
+                                Are you sure you want to edit <b>{c.name}</b>?
+                              </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter className="flex justify-end gap-2 mt-4">
+                              <DialogTrigger asChild>
+                                <Button variant="outline">Cancel</Button>
+                              </DialogTrigger>
+                              <DialogTrigger asChild>
+                                <Button
+                                  onClick={() => {
+                                    setEditingCategoryId(c.id);
+                                    setCategoryForm({
+                                      name: c.name,
+                                      description: c.description || "",
+                                      arabic_name: (c as any).arabic_name || "",
+                                      arabic_description: (c as any).arabic_description || "",
+                                    });
+                                  }}
+                                >
+                                  Yes, Edit
+                                </Button>
+                              </DialogTrigger>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+
+                                                  <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="outline">
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete this category?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. Are you sure you want to permanently delete <b>{c.name}</b>?
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => deleteCategory(c.id)}
+                                className="bg-destructive text-white hover:bg-red-600"
+                              >
+                                Confirm Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+
                           </div>
                         </div>
                       ))}
@@ -910,7 +1194,7 @@ const sessionRevenueAfterTax = useMemo(
           {/* Orders / Recent (SESSION) */}
           <TabsContent value="orders">
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><Clock className="w-5 h-5"/>Most Recent Orders</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Clock className="w-5 h-5"/>Today's Orders</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {ordersInSession.slice(0, 10).map((o) => (
@@ -934,8 +1218,7 @@ const sessionRevenueAfterTax = useMemo(
             </Card>
           </TabsContent>
 
-          {/* Analytics (GLOBAL — not reset by End Day) */}
-          {/* Analytics (GLOBAL & TODAY) */}
+       
 <TabsContent value="analytics">
   <Tabs defaultValue="all-time" className="space-y-4">
     <TabsList className="grid grid-cols-2">
@@ -964,7 +1247,7 @@ const sessionRevenueAfterTax = useMemo(
                      for (let i = 6; i >= 0; i--) {
                        const date = new Date(today);
                        date.setDate(date.getDate() - i);
-                       const dayRevenue = i === 0 ? sessionTotalRevenue : Math.random() * 500; // Mock data for past days
+                       const dayRevenue = i === 0 ? sessionTotalRevenue : Math.random() * 500; 
                        data.push({
                          date: date.toLocaleDateString(),
                          revenue: Number(dayRevenue.toFixed(2))
@@ -1100,145 +1383,53 @@ const sessionRevenueAfterTax = useMemo(
                       );
                       return Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10);
                     })()
-                  ).map(([name, qty]) => `<tr><td>${name}</td><td>${qty}</td></tr>`).join("")}
-                </table>
-                <h2>Summary</h2>
-                <p>Total Revenue: $${sessionTotalRevenue.toFixed(2)}</p>
-                <p>Total Tax (16%): $${sessionTotalTax.toFixed(2)}</p>
-                <p>Revenue After Tax: $${sessionRevenueAfterTax.toFixed(2)}</p>
-              </body>
-            </html>
-          `;
-          const w = window.open('', '', 'width=800,height=600');
-          w?.document.write(printContent);
-          w?.document.close();
-          w?.print();
-        }}
-      >
-        Print / Export
-      </Button>
-    </CardHeader>
-    <CardContent>
-      {(() => {
-        const counts = new Map<string, number>();
-        ordersInSession.forEach(o =>
-          (o.items || []).forEach(i =>
-            counts.set(i.name, (counts.get(i.name) || 0) + (i.quantity || 0))
-          )
-        );
-        const ranked = Array.from(counts.entries()).sort((a,b) => b[1] - a[1]).slice(0,10);
-        return ranked.length ? (
-          <div className="space-y-2">
-            {ranked.map(([name, qty]) => (
-              <div key={name} className="flex justify-between">
-                <div>{name}</div>
-                <div className="font-medium">{qty}</div>
-              </div>
-            ))}
-          </div>
-        ) : <p className="text-muted-foreground">No orders today</p>;
-      })()}
-    </CardContent>
-  </Card>
-</TabsContent>
-
-  </Tabs>
-</TabsContent>
-
-
-          {/* Analytics */}
-          <TabsContent value="analytics">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Revenue Bar Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="w-5 h-5" />
-                    Daily Revenue (Last 7 Days)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={(() => {
-                          const data = [];
-                          const today = new Date();
-                          for (let i = 6; i >= 0; i--) {
-                            const date = new Date(today);
-                            date.setDate(date.getDate() - i);
-                            const dayKey = toDayKey(date);
-                            const dayRevenue = i === 0 ? sessionTotalRevenue : Math.random() * 500; // Mock data for past days
-                            data.push({
-                              date: date.toLocaleDateString(),
-                              revenue: Number(dayRevenue.toFixed(2))
-                            });
-                          }
-                          return data;
-                        })()}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                      >
-                        <XAxis dataKey="date" />
-                        <YAxis />
-                        <Tooltip />
-                        <Bar dataKey="revenue" fill="hsl(var(--primary))" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Order Status Pie Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5" />
-                    Order Status Distribution
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={Object.entries(sessionOrdersByStatus)
-                            .filter(([_, count]) => count > 0)
-                            .map(([status, count]) => ({
-                              name: status,
-                              value: count,
-                              fill: status === 'completed' ? '#10b981' : 
-                                   status === 'pending' ? '#f59e0b' :
-                                   status === 'preparing' ? '#3b82f6' :
-                                   status === 'ready' ? '#8b5cf6' : '#ef4444'
-                            }))}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ name, value }) => `${name}: ${value}`}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {Object.entries(sessionOrdersByStatus)
-                            .filter(([_, count]) => count > 0)
-                            .map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={
-                                entry[0] === 'completed' ? '#10b981' : 
-                                entry[0] === 'pending' ? '#f59e0b' :
-                                entry[0] === 'preparing' ? '#3b82f6' :
-                                entry[0] === 'ready' ? '#8b5cf6' : '#ef4444'
-                              } />
-                            ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                       ).map(([name, qty]) => `<tr><td>${name}</td><td>${qty}</td></tr>`).join("")}
+                        </table>
+                        <h2>Summary</h2>
+                        <p>Total Revenue: $${sessionTotalRevenue.toFixed(2)}</p>
+                        <p>Total Tax (16%): $${sessionTotalTax.toFixed(2)}</p>
+                        <p>Revenue After Tax: $${sessionRevenueAfterTax.toFixed(2)}</p>
+                      </body>
+                    </html>
+                  `;
+                  const w = window.open('', '', 'width=800,height=600');
+                  w?.document.write(printContent);
+                  w?.document.close();
+                  w?.print();
+                }}
+              >
+                Print / Export
+              </Button>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const counts = new Map<string, number>();
+                  ordersInSession.forEach(o =>
+                    (o.items || []).forEach(i =>
+                      counts.set(i.name, (counts.get(i.name) || 0) + (i.quantity || 0))
+                    )
+                  );
+                  const ranked = Array.from(counts.entries()).sort((a,b) => b[1] - a[1]).slice(0,10);
+                  return ranked.length ? (
+                    <div className="space-y-2">
+                      {ranked.map(([name, qty]) => (
+                        <div key={name} className="flex justify-between">
+                          <div>{name}</div>
+                          <div className="font-medium">{qty}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="text-muted-foreground">No orders today</p>;
+                })()}
+              </CardContent>
+            </Card>
           </TabsContent>
+
+            </Tabs>
+          </TabsContent>
+
+
+         
           <TabsContent value="status">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {Object.entries(sessionOrdersByStatus).map(([status, count]) => (
@@ -1253,12 +1444,12 @@ const sessionRevenueAfterTax = useMemo(
             </div>
           </TabsContent>
 
-          {/* Past Days Orders Tab (reads from past_days) */}
+          {/* History Orders Tab (reads from past_days) */}
           
 <TabsContent value="past-days">
   <Card>
     <CardHeader className="flex justify-between items-center">
-      <CardTitle>Past Days Orders</CardTitle>
+      <CardTitle>History</CardTitle>
       <Button
         size="sm"
         variant="outline"
@@ -1304,13 +1495,53 @@ const sessionRevenueAfterTax = useMemo(
     <CardContent className="space-y-4">
       <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
         <div className="col-span-2">
-          <Label htmlFor="past-day">Select Date</Label>
-          <Input
-            id="past-day"
-            type="date"
-            value={pastDay}
-            onChange={(e) => setPastDay(e.target.value)}
-          />
+         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+  {/* Specific Day */}
+  <div>
+    <Label htmlFor="specific-day">Specific Day</Label>
+    <Input
+      id="specific-day"
+      type="date"
+      value={specificDay}
+      onChange={(e) => {
+        setSpecificDay(e.target.value);
+        setStartDate("");
+        setEndDate("");
+        setPastDay(e.target.value);
+      }}
+    />
+  </div>
+
+  {/* Date Range */}
+  <div>
+    <Label htmlFor="start-date">From</Label>
+    <Input
+      id="start-date"
+      type="date"
+      value={startDate}
+      onChange={(e) => {
+        const v = e.target.value;
+        setStartDate(v);
+        setSpecificDay("");
+      }}
+    />
+  </div>
+
+  <div>
+    <Label htmlFor="end-date">To</Label>
+    <Input
+      id="end-date"
+      type="date"
+      value={endDate}
+      onChange={(e) => {
+        const v = e.target.value;
+        setEndDate(v);
+        setSpecificDay("");
+      }}
+    />
+  </div>
+</div>
+
         </div>
         <div className="text-right">
           <div className="text-sm text-muted-foreground">Sales for {pastDay}</div>
@@ -1377,8 +1608,60 @@ function RealtimeTables({
         <div key={t.id} className="flex items-center justify-between p-3 border rounded-lg">
           <div className="flex-1"><p className="font-medium">Table {t.table_number}</p></div>
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => onEdit(t.id, t.table_number)}><Edit className="w-4 h-4" /></Button>
-            <Button size="sm" variant="outline" onClick={() => onDelete(t.id)}><Trash2 className="w-4 h-4" /></Button>
+            <Dialog>
+  <DialogTrigger asChild>
+    <Button size="sm" variant="outline">
+      <Edit className="w-4 h-4" />
+    </Button>
+  </DialogTrigger>
+
+  <DialogContent className="max-w-sm">
+    <DialogHeader>
+      <DialogTitle>Edit Confirmation</DialogTitle>
+      <DialogDescription>
+        Are you sure you want to edit <b>Table {t.table_number}</b>?
+      </DialogDescription>
+    </DialogHeader>
+    <DialogFooter className="flex justify-end gap-2 mt-4">
+      <DialogTrigger asChild>
+        <Button variant="outline">Cancel</Button>
+      </DialogTrigger>
+      <DialogTrigger asChild>
+        <Button
+          onClick={() => onEdit(t.id, t.table_number)}
+        >
+          Yes, Edit
+        </Button>
+      </DialogTrigger>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
+            <AlertDialog>
+  <AlertDialogTrigger asChild>
+    <Button size="sm" variant="outline">
+      <Trash2 className="w-4 h-4" />
+    </Button>
+  </AlertDialogTrigger>
+  <AlertDialogContent>
+    <AlertDialogHeader>
+      <AlertDialogTitle>Delete this table?</AlertDialogTitle>
+      <AlertDialogDescription>
+        This action cannot be undone. Are you sure you want to permanently delete <b>Table {t.table_number}</b>?
+      </AlertDialogDescription>
+    </AlertDialogHeader>
+    <AlertDialogFooter>
+      <AlertDialogCancel>Cancel</AlertDialogCancel>
+      <AlertDialogAction
+        onClick={() => onDelete(t.id)}
+        className="bg-destructive text-white hover:bg-red-600"
+      >
+        Confirm Delete
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  </AlertDialogContent>
+</AlertDialog>
+
             <Button size="sm" variant="outline" title="Generate QR" onClick={() => onGenerateQR(t.table_number)}>
               <QrCode className="w-4 h-4" />
             </Button>
